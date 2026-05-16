@@ -121,10 +121,10 @@ export default function BullBearSplit() {
     <section
       ref={ref}
       id="how"
-      className="relative w-full overflow-hidden px-6 py-24 sm:py-32"
+      className="relative w-full overflow-hidden px-6 py-16 sm:py-20"
     >
       <div className="mx-auto max-w-7xl">
-        <header className="mx-auto mb-12 max-w-2xl text-center">
+        <header className="mx-auto mb-8 max-w-2xl text-center">
           <p className="font-mono text-xs uppercase tracking-[0.4em] text-foreground/50">
             The adversarial frame
           </p>

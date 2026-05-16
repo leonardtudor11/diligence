@@ -12,9 +12,9 @@ import { Spotlight } from "@/components/ui/spotlight";
  */
 export default function SplineChartsDemo() {
   return (
-    <section className="px-6 py-24 sm:py-32">
+    <section className="px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-7xl">
-        <header className="mx-auto mb-10 max-w-2xl text-center">
+        <header className="mx-auto mb-8 max-w-2xl text-center">
           <p className="font-mono text-xs uppercase tracking-[0.4em] text-foreground/50">
             What you get back
           </p>

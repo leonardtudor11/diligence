@@ -30,7 +30,7 @@ export default function Hero() {
   return (
     <section
       ref={heroRef}
-      className="relative flex flex-col items-center justify-center px-6 pt-24 pb-16 sm:pt-32 sm:pb-24"
+      className="relative flex flex-col items-center justify-center px-6 pt-20 pb-12 sm:pt-24 sm:pb-16"
     >
       <Image
         src="/diligence-mark.svg"
@@ -49,13 +49,16 @@ export default function Hero() {
         Bull vs bear, <span className="neon-accent">side by side.</span>
       </h1>
 
-      <p className="hero-subtitle mt-6 max-w-2xl text-center font-mono text-base leading-relaxed text-foreground/70 sm:text-lg">
+      <p className="hero-subtitle mt-5 max-w-2xl text-center font-mono text-base leading-relaxed text-foreground/70 sm:text-lg">
         Diligence reads 10-K, 10-Q, and the earnings call. Five adversarial
         agents debate the evidence. You see the disputed facts, ranked by
         materiality.
       </p>
+      <p className="mt-3 max-w-xl text-center font-mono text-xs uppercase tracking-[0.3em] text-foreground/40">
+        Built for the analyst who skips the first eight hours.
+      </p>
 
-      <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+      <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
         <a
           href="#how"
           className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-transparent bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 cursor-pointer sm:w-48"
@@ -70,8 +73,8 @@ export default function Hero() {
         </a>
       </div>
 
-      <div className="hero-strip mt-20 w-full max-w-6xl">
-        <p className="mb-4 text-center font-mono text-[10px] uppercase tracking-[0.4em] text-foreground/40">
+      <div className="hero-strip mt-12 w-full max-w-6xl">
+        <p className="mb-3 text-center font-mono text-[10px] uppercase tracking-[0.4em] text-foreground/40">
           Coverage on day one
         </p>
         <TickerLogos />
