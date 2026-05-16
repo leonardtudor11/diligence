@@ -57,10 +57,10 @@ export default function Hero() {
 
       <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
         <a
-          href="#analyze"
+          href="#how"
           className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-transparent bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 cursor-pointer sm:w-48"
         >
-          Run a ticker
+          See the demo
         </a>
         <a
           href="#how"

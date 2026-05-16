@@ -1,12 +1,12 @@
 "use client";
 
-import { Suspense, lazy } from "react";
-
-const Spline = lazy(() => import("@splinetool/react-spline"));
+import Spline from "@splinetool/react-spline/next";
+import { Suspense } from "react";
 
 /**
- * Loads a Spline scene only on the client and only when needed (lazy + Suspense).
- * Keeps the ~1 MB Spline runtime out of the initial JS bundle.
+ * Loads a Spline scene through the Next.js App Router-aware subpath. The
+ * `/next` re-export handles the SSR boundary internally so we only need the
+ * Suspense fallback for the runtime download (~1 MB).
  */
 export function SplineScene({ scene, className }) {
   return (
