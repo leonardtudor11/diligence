@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" aria-label="Bull silhouette" fill="currentColor">
+  <!-- horns -->
+  <path d="M155 32 Q140 8 122 14 Q135 22 142 36 Z"/>
+  <path d="M185 32 Q200 8 218 14 Q205 22 198 36 Z"/>
+  <!-- head -->
+  <ellipse cx="170" cy="58" rx="34" ry="28"/>
+  <!-- snout -->
+  <ellipse cx="200" cy="68" rx="16" ry="12"/>
+  <!-- eye (cut out) -->
+  <circle cx="178" cy="52" r="3" fill="var(--background)"/>
+  <!-- ring in nose -->
+  <circle cx="206" cy="74" r="3" fill="none" stroke="var(--background)" stroke-width="1.5"/>
+  <!-- body -->
+  <path d="M40 80 Q24 70 28 92 L36 110 L44 116 L58 116 L60 100 L100 100 L102 116 L116 116 L122 104 L140 100 L150 84 Z"/>
+  <!-- hump on shoulder -->
+  <path d="M120 60 Q140 50 152 64 L150 84 L120 80 Z"/>
+  <!-- front leg detail -->
+  <rect x="44" y="104" width="6" height="20" rx="1"/>
+  <rect x="58" y="104" width="6" height="20" rx="1"/>
+  <rect x="102" y="104" width="6" height="20" rx="1"/>
+  <rect x="116" y="104" width="6" height="20" rx="1"/>
+  <!-- tail -->
+  <path d="M30 88 Q14 96 10 112 Q18 108 22 104" stroke="currentColor" stroke-width="3" fill="none"/>
+</svg>

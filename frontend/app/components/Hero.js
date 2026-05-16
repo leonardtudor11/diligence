@@ -63,16 +63,16 @@ export default function Hero() {
         materiality.
       </p>
 
-      <div className="mt-10 flex w-full max-w-md flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:gap-4">
+      <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
         <a
           href="#analyze"
-          className="hero-cta box-border inline-flex h-12 w-full items-center justify-center rounded-md border border-transparent bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 cursor-pointer sm:w-48"
+          className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-transparent bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 cursor-pointer sm:w-48"
         >
           Run a ticker
         </a>
         <a
           href="#how"
-          className="hero-cta box-border inline-flex h-12 w-full items-center justify-center rounded-md border border-border/60 bg-secondary/30 px-6 font-mono text-sm font-semibold tracking-wide text-foreground/90 transition-colors duration-200 hover:bg-secondary/60 cursor-pointer sm:w-48"
+          className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-border/60 bg-secondary/30 px-6 font-mono text-sm font-semibold tracking-wide text-foreground/90 transition-colors duration-200 hover:bg-secondary/60 cursor-pointer sm:w-48"
         >
           How it works
         </a>
