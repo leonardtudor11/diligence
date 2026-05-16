@@ -1,34 +1,35 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 (Day 2, after `agents/call.py` shipped).
+Last updated: 2026-05-17 (Day 2, after `agents/bear.py` shipped — 4 of 7 agents complete).
 
 ## Day-2 progress so far
 
 - ✅ `agents/schemas.py` — Pydantic contracts for every agent.
 - ✅ `docs/RESEARCH.md` — all five RQs from this file resolved with re-runnable probes (`scripts/research_probes.py`).
-- ✅ `agents/filing.py` — Gemini Filing Analyst. 32 NVDA claims, saved to `data/NVDA/analysis_filing.json`. Live tested.
-- ✅ `agents/call.py` — Gemini Call Analyst. 27 NVDA claims + 3 hedging examples, saved to `data/NVDA/analysis_call.json`. Live tested.
+- ✅ `agents/filing.py` — Gemini Filing Analyst. 32 NVDA claims, saved to `data/NVDA/analysis_filing.json`. 99 s wallclock, ≈$0.10.
+- ✅ `agents/call.py` — Gemini Call Analyst. 27 NVDA claims + 3 hedging examples, saved to `data/NVDA/analysis_call.json`. 62 s wallclock, ≈$0.05.
+- ✅ `agents/_qwen.py` — Featherless client helper. `call_qwen` (POST /v1/chat/completions, thinking-on by default, max_tokens 4500), `parse_qwen_json` fence stripper with brace-matching fallback (RQ3 surprise), `format_claim_catalogue` + `valid_claim_ids` shared with bull/bear.
+- ✅ `agents/bull.py` — Featherless Qwen3-32B Bull Agent. NVDA: 4 pillars, 14 cited IDs, 2 concessions, 37 s. Adversarial audit PASS (0 fabricated IDs). Saved to `data/NVDA/analysis_bull.json`.
+- ✅ `agents/bear.py` — Featherless Qwen3-32B Bear Agent. NVDA: 3 pillars, 9 cited IDs, 2 concessions, 31 s. Adversarial audit PASS (0 fabricated IDs). Saved to `data/NVDA/analysis_bear.json`.
 - ✅ Frontend live on Vultr: http://80.240.26.175 (Next.js 16 + nginx + systemd unit).
 - ✅ GitHub repo polish for judging: LICENSE (MIT), README rewrite, 17 topics, homepage set, footer with attribution.
 
-## Next session = bull / bear
+## Adversarial observation worth keeping
 
-Build order — strict:
+On NVDA the bull and bear cite **non-overlapping** evidence (bull leans on
+C-claims around forward momentum; bear leans on F-claims around H20
+export controls + gross-margin compression). That's the design working:
+each agent picks its strongest evidence and the reconciler will
+materialise the disagreements as DisputedFacts.
 
-1. **Probe Featherless Qwen3-32B first**. Confirm:
-   - `chat_template_kwargs.enable_thinking=false` works for utility calls.
-   - `/no_think` suffix in user message reinforces.
-   - `response_format: {"type": "json_object"}` parses after fence stripping (RQ3 SURPRISE).
-   - Single probe: ask for a known BullCase shape JSON, assert `parse_qwen_json(resp)` returns dict.
-2. **`agents/bull.py`** — Featherless Qwen3-32B. Reads `analysis_filing.json` + `analysis_call.json`. Must cite Bull pillars by F-NNN / C-NNN IDs only. Never invent. Output saved to `data/{ticker}/analysis_bull.json`.
-3. **`agents/bear.py`** — mirror of bull, copy + invert prompt.
-4. **Adversarial check** — for each: every `cited_claim_ids[]` entry must exist in the union of filing + call claim IDs. Reject and re-prompt if not (or flag for reconciler).
+## Next session = reconciler + graph + runner
 
-## Then = reconciler / graph / runner
-
-5. **`agents/reconciler.py`** — Gemini diffs Bull vs Bear → Reconciliation with disputed_facts ranked 1–10 by materiality. `uncited_claims_flag=true` if either side cited a non-existent ID.
-6. **`agents/graph.py`** — LangGraph StateGraph. Module-scope TypedDict + `Annotated[dict, _merge_agents]` (Python 3.14 forward-ref rule). Fan-out: Filing+Call (Gemini parallel) → Bull+Bear (Featherless parallel) → Reconciler.
-7. **`agents/run.py`** — CLI: `python -m agents.run NVDA` orchestrates 1-6, writes `data/{ticker}/reconciliation.json`.
+1. **`agents/reconciler.py`** — Gemini 2.5 Pro. Reads bull + bear JSON. Diffs them → `Reconciliation.disputed_facts[]` ranked 1–10 by materiality. Sets `uncited_claims_flag=true` if either side referenced a non-existent ID (shouldn't happen given the upstream audit, but belt + suspenders). Sets `confidence_downgrade_reason` if any upstream output set `injection_detected` or any claim is `unverified_audio` (every call claim is).
+2. **`agents/graph.py`** — LangGraph `StateGraph`. State at MODULE scope per RQ4 (Python 3.14 forward-ref rule). `Annotated[dict, _merge_agents]` reducer on the `agents` field. Fan-out:
+   - START → Filing (Gemini) + Call (Gemini) in parallel
+   - join → Bull (Featherless) + Bear (Featherless) in parallel (asyncio.gather inside one node)
+   - join → Reconciler (Gemini) → END
+3. **`agents/run.py`** — CLI: `python -m agents.run NVDA [--reuse-cache]`. Orchestrates 1–6, writes `data/{ticker}/reconciliation.json`. `--reuse-cache` skips re-running any agent whose output JSON already exists (saves $$ + time on iteration).
 
 ## Then = backend + dashboard
 
