@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --background: #020617;
+  --foreground: #F8FAFC;
+  --primary: #0F172A;
+  --secondary: #1E293B;
+  --accent: #22C55E;
+  --muted: #1A1E2F;
+  --border: #334155;
+  --destructive: #EF4444;
+  --ring: #0F172A;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 10%, rgba(34, 197, 94, 0.08), transparent 50%),
+    radial-gradient(circle at 80% 30%, rgba(239, 68, 68, 0.06), transparent 55%),
+    var(--background);
+  color: var(--foreground);
+}
+
+.neon-accent {
+  color: var(--accent);
+  text-shadow:
+    0 0 12px rgba(34, 197, 94, 0.45),
+    0 0 24px rgba(34, 197, 94, 0.2);
+}
+
+.logo-strip-mask {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

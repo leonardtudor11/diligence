@@ -8,8 +8,9 @@ __pycache__/
 .mypy_cache/
 
 # Cached primary sources — large, redownloadable
-data/*/raw/
-data/*/transcripts/*.json
+# Entire data/ tree is per-ticker JSON + audio caches built by services/ingest.py.
+# Re-derivable; never commit. .env keeps API keys, .env.example keeps the schema.
+data/
 *.mp3
 *.wav
 *.m4a
