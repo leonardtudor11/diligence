@@ -120,7 +120,7 @@ export default function BullBearSplit() {
   return (
     <section
       ref={ref}
-      id="how"
+      id="adversarial"
       className="relative w-full overflow-hidden px-6 py-16 sm:py-20"
     >
       <div className="mx-auto max-w-7xl">

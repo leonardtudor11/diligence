@@ -105,8 +105,8 @@ class Citation(BaseModel):
     # Optional verbatim quote for UI display + auditor verification ------------------
     quote: Optional[str] = Field(
         default=None,
-        description="Verbatim text excerpt. <=300 chars. Always recommended.",
-        max_length=300,
+        description="Verbatim text excerpt. <=500 chars. Always recommended.",
+        max_length=500,
     )
 
 

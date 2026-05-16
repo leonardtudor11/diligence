@@ -38,7 +38,7 @@ const STEPS = [
 
 export default function SplineSceneDemo() {
   return (
-    <section className="px-6 py-16 sm:py-20">
+    <section id="how" className="px-6 py-16 sm:py-20">
       <div className="mx-auto max-w-7xl">
         <Card className="relative w-full overflow-hidden bg-black/[0.96]">
           <Spotlight
