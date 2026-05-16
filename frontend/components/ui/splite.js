@@ -1,13 +1,16 @@
 "use client";
 
-import Spline from "@splinetool/react-spline/next";
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 
 /**
- * Loads a Spline scene through the Next.js App Router-aware subpath. The
- * `/next` re-export handles the SSR boundary internally so we only need the
- * Suspense fallback for the runtime download (~1 MB).
+ * Spline scene wrapper. We use the plain `@splinetool/react-spline` import
+ * (not `/next`) because the /next subpath exports an async server component
+ * that can't be rendered inside the `"use client"` parents that drive our
+ * Card + Spotlight layout. React.lazy + Suspense keeps the ~1 MB Spline
+ * runtime out of the initial client bundle.
  */
+const Spline = lazy(() => import("@splinetool/react-spline"));
+
 export function SplineScene({ scene, className }) {
   return (
     <Suspense
