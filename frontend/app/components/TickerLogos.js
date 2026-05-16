@@ -69,6 +69,7 @@ export default function TickerLogos() {
               height={32}
               unoptimized
               className="opacity-90"
+              style={{ width: "auto", height: "32px" }}
             />
             <figcaption className="font-display text-sm font-bold tracking-widest text-foreground/90">
               {ticker}

@@ -11,19 +11,11 @@ export default function Hero() {
 
   useGSAP(
     () => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-      tl.from(".hero-mark", { opacity: 0, scale: 0.9, duration: 0.6 })
-        .from(".hero-eyebrow", { opacity: 0, y: 12, duration: 0.4 }, "-=0.25")
-        .from(".hero-title", { opacity: 0, y: 24, duration: 0.7 }, "-=0.2")
-        .from(".hero-subtitle", { opacity: 0, y: 16, duration: 0.5 }, "-=0.4")
-        .from(
-          ".hero-cta",
-          { opacity: 0, y: 12, duration: 0.4, stagger: 0.08 },
-          "-=0.3"
-        )
-        .from(".hero-strip", { opacity: 0, y: 20, duration: 0.6 }, "-=0.1");
-
-      // Continuous breathing glow on the mark.
+      // Breathing glow on the mark only. Entrance fade-ins were removed because
+      // gsap.from({opacity:0}) snaps the element invisible on mount and stays
+      // there until the tween's first frame ticks, which produced a visible
+      // "blank flash" on every refresh and made the buttons appear off-axis
+      // when caught mid-stagger.
       gsap.to(".hero-mark", {
         filter: "drop-shadow(0 0 18px rgba(34,197,94,0.55))",
         duration: 2.4,
