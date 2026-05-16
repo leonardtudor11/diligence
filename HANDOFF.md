@@ -1,6 +1,77 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-16 (Day 1 of the 3-day hackathon, late evening).
+Last updated: 2026-05-17 (Day 2, after `agents/call.py` shipped).
+
+## Day-2 progress so far
+
+- ✅ `agents/schemas.py` — Pydantic contracts for every agent.
+- ✅ `docs/RESEARCH.md` — all five RQs from this file resolved with re-runnable probes (`scripts/research_probes.py`).
+- ✅ `agents/filing.py` — Gemini Filing Analyst. 32 NVDA claims, saved to `data/NVDA/analysis_filing.json`. Live tested.
+- ✅ `agents/call.py` — Gemini Call Analyst. 27 NVDA claims + 3 hedging examples, saved to `data/NVDA/analysis_call.json`. Live tested.
+- ✅ Frontend live on Vultr: http://80.240.26.175 (Next.js 16 + nginx + systemd unit).
+- ✅ GitHub repo polish for judging: LICENSE (MIT), README rewrite, 17 topics, homepage set, footer with attribution.
+
+## Next session = bull / bear
+
+Build order — strict:
+
+1. **Probe Featherless Qwen3-32B first**. Confirm:
+   - `chat_template_kwargs.enable_thinking=false` works for utility calls.
+   - `/no_think` suffix in user message reinforces.
+   - `response_format: {"type": "json_object"}` parses after fence stripping (RQ3 SURPRISE).
+   - Single probe: ask for a known BullCase shape JSON, assert `parse_qwen_json(resp)` returns dict.
+2. **`agents/bull.py`** — Featherless Qwen3-32B. Reads `analysis_filing.json` + `analysis_call.json`. Must cite Bull pillars by F-NNN / C-NNN IDs only. Never invent. Output saved to `data/{ticker}/analysis_bull.json`.
+3. **`agents/bear.py`** — mirror of bull, copy + invert prompt.
+4. **Adversarial check** — for each: every `cited_claim_ids[]` entry must exist in the union of filing + call claim IDs. Reject and re-prompt if not (or flag for reconciler).
+
+## Then = reconciler / graph / runner
+
+5. **`agents/reconciler.py`** — Gemini diffs Bull vs Bear → Reconciliation with disputed_facts ranked 1–10 by materiality. `uncited_claims_flag=true` if either side cited a non-existent ID.
+6. **`agents/graph.py`** — LangGraph StateGraph. Module-scope TypedDict + `Annotated[dict, _merge_agents]` (Python 3.14 forward-ref rule). Fan-out: Filing+Call (Gemini parallel) → Bull+Bear (Featherless parallel) → Reconciler.
+7. **`agents/run.py`** — CLI: `python -m agents.run NVDA` orchestrates 1-6, writes `data/{ticker}/reconciliation.json`.
+
+## Then = backend + dashboard
+
+8. **`backend/api.py`** — FastAPI on Vultr. Endpoints: `POST /api/research/{ticker}`, `GET /api/research/{ticker}`, SSE `/api/research/{ticker}/stream`. systemd unit + nginx route `/api/`.
+9. **`frontend/app/research/[ticker]/page.js`** — dashboard route. Recharts MaterialityChart. 3-column bull/disputed/bear. TranscriptPlayer with click-to-jump.
+10. Wire "See the demo" → /research/NVDA. Demo video. Submit.
+
+## Hard rules (unchanged)
+
+1. Never run `gcloud auth application-default login` or `…set-quota-project` — overwrites the RobotBoy production ADC. See `feedback_robotboy_adc` memory and `SECURITY.md` §4.
+2. Never `git add -A` or `git add .` — always stage specific files.
+3. Never log API keys. httpx INFO must be silenced in every new module (pattern: `logging.getLogger("httpx").setLevel(logging.WARNING)` + same for `httpcore`).
+4. Never use `vertexai.generative_models` — use `google-genai`. Model ID `gemini-2.5-pro`, `location="global"`.
+5. Mirel's Claude Code UI **cannot select AskUserQuestion dropdown options** — always ask in plain prose ("A) … B) … C) — which?"). See `feedback_no_ask_dropdowns` memory.
+
+## Auth verification (every session)
+
+```bash
+cd ~/diligence
+source .venv/bin/activate
+gcloud config configurations activate hackathon
+python -c "from vertex_client import get_client; c = get_client(); print(c.models.generate_content(model='gemini-2.5-flash', contents='Reply OK').text)"
+```
+
+(One-liner `get_client().models.generate_content(...)` triggers a GC race in google-genai 2.3 — always bind the client to a variable first.)
+
+## Vultr SSH
+
+```bash
+ssh root@80.240.26.175
+```
+
+Deploy after frontend changes:
+
+```bash
+ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git pull --ff-only && cd frontend && sudo -u diligence npm ci --no-audit --no-fund && sudo -u diligence npm run build && systemctl restart diligence-frontend'
+```
+
+---
+
+## (Original handoff from Day 1 below — kept for reference)
+
+
 
 If you are a fresh Claude session, read this file first, then `docs/CONTEXT.md`, `docs/AUDIT.md`, then `SECURITY.md`. Do not rerun the Day-1 probes — they all passed and the ingestion pipeline is live.
 

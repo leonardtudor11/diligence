@@ -38,13 +38,6 @@ export default function SplineChartsDemo() {
               className="h-full w-full"
             />
           </div>
-          <div className="pointer-events-none absolute bottom-4 right-4 z-20 hidden sm:block">
-            <div className="rounded-md border border-border/40 bg-black/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] text-foreground/70 backdrop-blur">
-              <span className="text-accent">live</span>
-              <span className="mx-2 text-foreground/30">·</span>
-              <span>reconciler output preview</span>
-            </div>
-          </div>
         </Card>
       </div>
     </section>
