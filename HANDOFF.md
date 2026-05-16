@@ -1,6 +1,6 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 (Day 2, after `agents/bear.py` shipped — 4 of 7 agents complete).
+Last updated: 2026-05-17 (Day 2 complete — all 7 agents shipped + graph + CLI runner).
 
 ## Day-2 progress so far
 
@@ -11,6 +11,9 @@ Last updated: 2026-05-17 (Day 2, after `agents/bear.py` shipped — 4 of 7 agent
 - ✅ `agents/_qwen.py` — Featherless client helper. `call_qwen` (POST /v1/chat/completions, thinking-on by default, max_tokens 4500), `parse_qwen_json` fence stripper with brace-matching fallback (RQ3 surprise), `format_claim_catalogue` + `valid_claim_ids` shared with bull/bear.
 - ✅ `agents/bull.py` — Featherless Qwen3-32B Bull Agent. NVDA: 4 pillars, 14 cited IDs, 2 concessions, 37 s. Adversarial audit PASS (0 fabricated IDs). Saved to `data/NVDA/analysis_bull.json`.
 - ✅ `agents/bear.py` — Featherless Qwen3-32B Bear Agent. NVDA: 3 pillars, 9 cited IDs, 2 concessions, 31 s. Adversarial audit PASS (0 fabricated IDs). Saved to `data/NVDA/analysis_bear.json`.
+- ✅ `agents/reconciler.py` — Gemini Reconciler. NVDA: 3 disputed facts ranked 9/8/7, 4 shared_ground, 0 integrity warnings, `confidence_downgrade_reason` populated (27 unverified_audio call claims). 35–44 s, ≈$0.03. Saved to `data/NVDA/reconciliation.json`.
+- ✅ `agents/graph.py` — LangGraph `StateGraph`. Module-scope `State` TypedDict (RQ4). `Annotated[dict, _merge_agents]` reducer. START→filing+call→bull+bear→reconciler→END. Per-node `reuse_cache` short-circuit.
+- ✅ `agents/run.py` — CLI: `python -m agents.run NVDA [--reuse-cache]`. End-to-end orchestration, prints top-3 disputed + warnings + downgrade reason.
 - ✅ Frontend live on Vultr: http://80.240.26.175 (Next.js 16 + nginx + systemd unit).
 - ✅ GitHub repo polish for judging: LICENSE (MIT), README rewrite, 17 topics, homepage set, footer with attribution.
 
@@ -22,20 +25,35 @@ export controls + gross-margin compression). That's the design working:
 each agent picks its strongest evidence and the reconciler will
 materialise the disagreements as DisputedFacts.
 
-## Next session = reconciler + graph + runner
+## Next session = backend + dashboard (Day 3)
 
-1. **`agents/reconciler.py`** — Gemini 2.5 Pro. Reads bull + bear JSON. Diffs them → `Reconciliation.disputed_facts[]` ranked 1–10 by materiality. Sets `uncited_claims_flag=true` if either side referenced a non-existent ID (shouldn't happen given the upstream audit, but belt + suspenders). Sets `confidence_downgrade_reason` if any upstream output set `injection_detected` or any claim is `unverified_audio` (every call claim is).
-2. **`agents/graph.py`** — LangGraph `StateGraph`. State at MODULE scope per RQ4 (Python 3.14 forward-ref rule). `Annotated[dict, _merge_agents]` reducer on the `agents` field. Fan-out:
-   - START → Filing (Gemini) + Call (Gemini) in parallel
-   - join → Bull (Featherless) + Bear (Featherless) in parallel (asyncio.gather inside one node)
-   - join → Reconciler (Gemini) → END
-3. **`agents/run.py`** — CLI: `python -m agents.run NVDA [--reuse-cache]`. Orchestrates 1–6, writes `data/{ticker}/reconciliation.json`. `--reuse-cache` skips re-running any agent whose output JSON already exists (saves $$ + time on iteration).
+Agent layer is feature-complete. Verify via:
 
-## Then = backend + dashboard
+```bash
+cd ~/diligence && source .venv/bin/activate
+gcloud config configurations activate hackathon
+python -m agents.run NVDA --reuse-cache   # ~0.0s, prints top-3 disputed
+```
 
-8. **`backend/api.py`** — FastAPI on Vultr. Endpoints: `POST /api/research/{ticker}`, `GET /api/research/{ticker}`, SSE `/api/research/{ticker}/stream`. systemd unit + nginx route `/api/`.
-9. **`frontend/app/research/[ticker]/page.js`** — dashboard route. Recharts MaterialityChart. 3-column bull/disputed/bear. TranscriptPlayer with click-to-jump.
-10. Wire "See the demo" → /research/NVDA. Demo video. Submit.
+Day-3 critical path:
+
+1. **`backend/api.py`** — FastAPI on Vultr. Endpoints:
+   - `POST /api/research/{ticker}` — trigger `agents.graph.run_for_ticker`, return `run_id`
+   - `GET  /api/research/{ticker}` — return cached reconciliation.json + all 4 agent JSONs
+   - `SSE  /api/research/{ticker}/stream` — emit per-node-complete events as the graph runs
+   - systemd unit at `/etc/systemd/system/diligence-api.service` + nginx route `/api/` → 127.0.0.1:8000.
+2. **`frontend/app/research/[ticker]/page.js`** — dashboard route. Three columns: bull pillars / disputed facts (ranked by materiality, Recharts horizontal bar) / bear pillars. TranscriptPlayer (wavesurfer.js v7 + @wavesurfer/react, click word → seek audio). Server-fetch reconciliation.json via the FastAPI GET endpoint.
+3. **`frontend/app/page.js` — wire "See the demo" → `/research/NVDA`**, retire any remaining placeholder CTAs.
+4. **Demo video** — 3 min, screen capture of NVDA dashboard + voiceover.
+5. **Submit.**
+
+## Reconciler design notes (for Day-3 dashboard wiring)
+
+- `Reconciliation.disputed_facts[]` is sorted descending by `materiality_score` (1–10) by the orchestrator — frontend can trust the order.
+- `uncited_claims_flag` on a `DisputedFact` is set deterministically *after* the model returns, by comparing `bull_claim_ids` + `bear_claim_ids` against the F+C union. Render a ⚠ chip when true.
+- `confidence_downgrade_reason` is **always** populated for NVDA today because every call claim is `unverified_audio` (yt-dlp source). Render as a banner above the dashboard; UI copy can say "Call claims pending verified audio source — see methodology".
+- `integrity_warnings: List[str]` — render as a collapsible "Audit" tab. Empty on clean runs.
+- `shared_ground: List[str]` — bullet list under the disputed-facts column, labelled "Both sides agree".
 
 ## Hard rules (unchanged)
 
