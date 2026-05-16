@@ -1,25 +1,90 @@
 # Diligence
 
-Adversarial multi-agent investment due-diligence system. Built for Milan AI Week / lablab.ai hackathon (Vultr, Gemini, Featherless, Speechmatics tracks).
+**Adversarial multi-agent due-diligence on public-company tickers.**
 
-User picks a publicly-traded company. The system ingests primary sources (SEC 10-K, earnings call audio, fundamentals), runs specialized AI agents that independently build the strongest Bull case and Bear case from the same evidence, then synthesizes a Reconciler analysis that surfaces disputed facts. Every claim cites its source.
+🔗 Live demo · http://80.240.26.175
+📺 Walk-through · _coming with submission_
+🏆 Track · [lablab.ai Milan AI Week '26](https://lablab.ai/) — Gemini · Featherless · Speechmatics · Vultr
 
-**Research-grade, not advisory.** No buy/sell/hold recommendations. Evidence and counter-evidence; the human decides.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Stack](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](frontend/)
+[![Stack](https://img.shields.io/badge/Gemini-2.5%20Pro-4285F4?logo=google)](https://cloud.google.com/vertex-ai)
+[![Stack](https://img.shields.io/badge/LangGraph-1.2-orange)](https://www.langchain.com/langgraph)
+[![Stack](https://img.shields.io/badge/Hosted-Vultr-007BFC?logo=vultr)](https://www.vultr.com)
+
+![Diligence landing page](docs/screenshot-landing.png)
 
 ---
 
-## Architecture (three layers)
+## What it does
 
-1. **Data ingestion** — SEC EDGAR (10-K/10-Q), investor-relations MP3 (earnings call), Financial Modeling Prep (fundamentals). Cached to `data/{ticker}/` as JSON for deterministic, offline-able demos.
-2. **Agent layer**
-   - Filing Analyst — Gemini 2.5 Pro on full 10-K
-   - Call Analyst — Gemini 2.5 Pro on diarized transcript
-   - Bull Agent — Featherless Qwen3, parallel
-   - Bear Agent — Featherless Qwen3, parallel
-   - Reconciler — Gemini 2.5 Pro, surfaces disputed facts
-3. **Orchestration & delivery** — LangGraph state machine, FastAPI backend, React three-column UI, audio player with click-to-jump diarized transcript, Vultr deployment.
+Paste a public-company ticker. Diligence reads the **10-K, 10-Q, and the latest earnings call** (audio → diarized transcript), runs **five adversarial AI agents** that build the bull case and the bear case from the same evidence, then surfaces the **disputed facts** — ranked by materiality, citation-linked back to the source filing section or transcript timestamp.
 
-Out of scope: RAG, vector DBs, Airflow, technical charts beyond a snapshot, M&A / ETF construction, real-time live calls.
+> Built for the analyst who skips the first eight hours.
+
+**Research-grade, not advisory.** No buy/sell/hold. Evidence and counter-evidence; the human decides.
+
+---
+
+## Why adversarial
+
+Single-LLM summarisers are biased toward the loudest passage. Diligence forces two agents to argue opposite cases from the **same primary-source claim IDs**, then uses a third agent to score where they materially disagree. Every claim must cite a `claim_id` from the Filing or Call analyst's output; un-cited assertions are flagged automatically.
+
+```
+                ┌───────────────────────────┐
+   10-K + 10-Q ─►│ Filing Analyst (Gemini)   ├── claim_ids F-001…
+                └───────────────────────────┘
+                ┌───────────────────────────┐
+ Earnings call ─►│ Call Analyst   (Gemini)   ├── claim_ids C-001…
+                └───────────────────────────┘
+                           │
+            ┌──────────────┼──────────────┐
+            ▼                             ▼
+   ┌────────────────┐            ┌────────────────┐
+   │ Bull (Qwen3)   │   parallel │ Bear (Qwen3)   │
+   └────────────────┘            └────────────────┘
+            │                             │
+            └──────────────┬──────────────┘
+                           ▼
+                ┌───────────────────────────┐
+                │ Reconciler (Gemini)        │── DisputedFacts
+                │  · diff bull vs bear       │   ranked 1–10 by
+                │  · score materiality       │   materiality
+                │  · flag uncited claims     │
+                └───────────────────────────┘
+```
+
+Orchestrated by **LangGraph** (`StateGraph`, parallel Bull + Bear via `asyncio.gather`). Schemas are Pydantic, Vertex-enforced on the Gemini side; Featherless responses pass through a markdown-fence stripper before parsing.
+
+---
+
+## Stack
+
+| Layer | Tech | Notes |
+|-------|------|-------|
+| Frontend | Next.js 16 · React 19 · Tailwind 4 · GSAP | App Router, Turbopack default. JavaScript (not TS) per author pref. |
+| 3D scenes | Spline + @splinetool/react-spline | Two community scenes for hero accents (robot + interactive charts). |
+| Agents | LangGraph 1.2 · Pydantic 2 · `google-genai` 2.3 · Featherless OpenAI-compat | Module-scope `Annotated[dict, reducer]` state for parallel writes. |
+| Inference | Gemini 2.5 Pro (Vertex AI, `location="global"`) · Qwen3-32B (Featherless) | 1 M context, structured output via `response_schema=<PydanticModel>`. |
+| Audio | yt-dlp · ffmpeg · Speechmatics (batch, diarized) | Word-level timestamps + speaker labels for click-to-jump UI. |
+| Fundamentals | Financial Modeling Prep `/stable/` | Free tier; profile + ratios + 3 statements per ticker. |
+| Filings | SEC EDGAR | 10-K + 10-Q stripped to plain text via `lxml`. |
+| Host | Vultr High Frequency 8 vCPU · Ubuntu 24.04 · nginx · systemd | Frontend live; backend deploy planned post-agent build. |
+
+---
+
+## Status (2026-05-17)
+
+| Layer | State |
+|-------|-------|
+| Ingestion pipeline | ✅ End-to-end on NVDA (10-K + 10-Q + audio + transcript + fundamentals + manifest) |
+| Pydantic schemas (`agents/schemas.py`) | ✅ Citation, Claim, FilingAnalysis, CallAnalysis, BullCase, BearCase, Reconciliation |
+| Research questions (`docs/RESEARCH.md`) | ✅ All five resolved before agent code (async genai, nested schemas, JSON fences, LangGraph dict merge, prompt-injection wrap) |
+| Filing / Call / Bull / Bear / Reconciler agents | 🟡 In progress |
+| LangGraph orchestrator (`agents/graph.py`) | 🟡 Pending |
+| FastAPI backend on Vultr | 🟡 Pending |
+| Frontend (landing) | ✅ Live at http://80.240.26.175 |
+| Demo video | 🟡 Pending |
 
 ---
 
@@ -29,42 +94,56 @@ Out of scope: RAG, vector DBs, Airflow, technical charts beyond a snapshot, M&A 
 
 **Solution:** mint a short-lived OAuth access token via `gcloud auth print-access-token` against the active gcloud configuration. Token lives in-process, is auto-refreshed before expiry, never touches disk. ADC file is untouched.
 
-Implementation: `vertex_client.py`. All Vertex AI work imports `get_client()` from that module.
+Implementation: [`vertex_client.py`](vertex_client.py). All Vertex AI work imports `get_client()` from that module.
 
 ### One-time setup
 
 ```bash
-# Separate gcloud configuration for this project
 gcloud config configurations create hackathon
 gcloud config configurations activate hackathon
 gcloud auth login mirel_leonard@yahoo.com
 gcloud config set project project-2be42b84-14e0-421a-b3a
-
-# Confirm Vertex enabled
-gcloud services enable aiplatform.googleapis.com --project=project-2be42b84-14e0-421a-b3a
+gcloud services enable aiplatform.googleapis.com \
+  --project=project-2be42b84-14e0-421a-b3a
 ```
 
-### Every working session
+### Every session
 
 ```bash
-gcloud config configurations activate hackathon
 cd ~/diligence
 source .venv/bin/activate
+gcloud config configurations activate hackathon
 ```
 
-### Project IDs
+---
 
-| Project | ID | Notes |
-|---------|-----|-------|
-| Diligence (hackathon) | `project-2be42b84-14e0-421a-b3a` | All Vertex calls billed here |
-| RobotBoy (production) | `project-27a856db-d84f-4ee4-a6a` | Untouched by this repo |
+## Run locally
 
-### Vertex SDK notes
+```bash
+git clone https://github.com/leonardtudor11/diligence.git
+cd diligence
 
-- Use `google-genai`, not the deprecated `vertexai.generative_models`
-- `Client(vertexai=True, project=..., location="global", credentials=...)`
-- `location="global"` for Gemini text/image (us-central1 returns 404 for newer Gemini IDs)
-- `location="us-central1"` only if Veo video added later (not in current scope)
+# Backend
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # fill in API keys
+
+# Smoke test all five services (Day-1 probes)
+python scripts/probe_vertex.py
+python scripts/probe_speechmatics.py
+python scripts/probe_featherless.py
+python scripts/probe_fmp.py
+python scripts/probe_edgar.py
+
+# End-to-end ingestion (NVDA cached)
+python -m services.ingest NVDA
+
+# Frontend
+cd frontend
+npm ci
+npm run dev    # → http://localhost:3000
+```
 
 ---
 
@@ -74,26 +153,11 @@ Copy `.env.example` → `.env` and fill in:
 
 | Var | Source |
 |-----|--------|
-| `SPEECHMATICS_API_KEY` | speechmatics.com console, AIWEEK200 promo applied |
+| `SPEECHMATICS_API_KEY` | speechmatics.com console (AIWEEK200 promo applied) |
 | `FEATHERLESS_API_KEY` | featherless.ai dashboard |
 | `FMP_API_KEY` | financialmodelingprep.com free tier |
 | `SEC_USER_AGENT` | EDGAR ToS — set to your real email |
-
----
-
-## Verify each service independently — do this BEFORE agent code
-
-Day-1 discipline. Each service must pass its own probe before integration.
-
-```bash
-python scripts/probe_vertex.py        # Gemini via Vertex
-python scripts/probe_speechmatics.py  # batch transcription + diarization
-python scripts/probe_featherless.py   # Qwen3 inference
-python scripts/probe_fmp.py           # fundamentals
-python scripts/probe_edgar.py         # SEC 10-K/10-Q lookup
-```
-
-`probe_speechmatics.py` needs a short MP3 at `data/probe_clip.mp3` (any 5-10 sec voice clip).
+| `TWENTYFIRST_API_KEY` | _optional_ — only if using 21st.dev Magic MCP for UI generation |
 
 ---
 
@@ -101,15 +165,36 @@ python scripts/probe_edgar.py         # SEC 10-K/10-Q lookup
 
 ```
 diligence/
-├── vertex_client.py         # Auth helper — gcloud token, never touches ADC
-├── .env.example             # Service credentials template
+├── vertex_client.py            # Auth helper — gcloud token, never touches ADC
+├── .env.example                # Service credentials template
 ├── requirements.txt
-├── scripts/                 # Throwaway probes for each service
-├── services/                # Production service clients (Day 1 evening +)
-├── agents/                  # Bull / Bear / Reconciler / Filing / Call (Day 2)
-├── data/                    # Cached primary sources, JSON per ticker
-└── docs/                    # Architecture notes, demo script
+├── scripts/                    # Day-1 probes + research_probes.py (Day-2 RQ verification)
+├── services/                   # Production ingestion clients (Day 1 evening +)
+│   ├── ingest.py, edgar.py, fmp.py, audio.py, speech.py
+├── agents/                     # Adversarial agents + LangGraph orchestrator (Day 2)
+│   └── schemas.py              # Pydantic contracts every agent reads/writes
+├── frontend/                   # Next.js 16 landing + dashboard (Day 3)
+│   ├── app/components/         # Hero, BullBearSplit, SplineSceneDemo, Footer
+│   ├── components/ui/          # Card, Spotlight, Spline scene wrapper
+│   ├── lib/utils.js            # cn() helper
+│   └── public/                 # Bull/bear silhouettes + ticker brand logos
+└── docs/
+    ├── CONTEXT.md              # Original project briefing
+    ├── HANDOFF.md (../)        # Per-session handoff doc
+    ├── AUDIT.md                # Day-1 adversarial review findings
+    ├── RESEARCH.md             # Day-2 research-question answers
+    └── screenshot-landing.png  # Hero screenshot for this README
 ```
+
+---
+
+## Architecture pins (locked in `docs/RESEARCH.md`)
+
+- **Async Gemini surface**: `await client.aio.models.generate_content(...)` works — no thread wrapping needed.
+- **Structured output**: `response_schema=<PydanticModel>` enforced by Vertex for deeply nested lists.
+- **Featherless gotcha**: `response_format: {"type": "json_object"}` is accepted but Qwen3-32B wraps payload in ``` ```json``` fences. Strip before `json.loads`.
+- **LangGraph parallel writes**: module-scope `TypedDict` with `Annotated[dict, _merge_agents]` (Python 3.14 strict forward-ref eval).
+- **Prompt-injection defence**: wrap filing/transcript content in `<filing>` / `<transcript>` XML, system prompt treats tag contents as data not instructions, surface `injection_detected: bool` on every analyst output.
 
 ---
 
@@ -117,15 +202,38 @@ diligence/
 
 | Track | What we use |
 |-------|-------------|
-| Vultr | Backend host + public demo URL |
-| Gemini | `gemini-2.5-pro` for Filing / Call / Reconciler heavy reasoning |
-| Featherless | Qwen3 for Bull / Bear adversarial agents |
-| Speechmatics | Batch transcription + speaker diarization on earnings call MP3 |
+| **Vultr** | High Frequency 8 vCPU/16 GB instance in Frankfurt, $200 credit covers ~2 months runtime |
+| **Gemini** | `gemini-2.5-pro` for Filing / Call / Reconciler (heavy reasoning + structured output) |
+| **Featherless** | Qwen3-32B for parallel Bull / Bear adversarial reasoning |
+| **Speechmatics** | Batch transcription + speaker diarization on the earnings call MP3 |
 
 ---
 
-## Day plan
+## Security model — high level
 
-- **Day 1** — auth + probes + pick demo ticker (NVDA / TSLA / PLTR) + data ingestion
-- **Day 2** — agent layer (5 agents) + LangGraph orchestration
-- **Day 3** — frontend + Vultr deploy + demo video + submission
+- `.env` is gitignored; the example file ships only var names + free-tier acquisition instructions.
+- Auth uses short-lived gcloud OAuth tokens — no SA keys, no ADC file mutation.
+- `httpx` and `httpcore` loggers muted in every module that hits a query-string API to prevent secret leakage in tracebacks.
+- All HTTP-response key access wrapped + raised as a domain-specific `DiligenceError` subclass (audit-fixed Day 1).
+- Production VM: UFW restricts to 22 / 80 / 443, fail2ban on sshd, automatic unattended security updates.
+
+Full policy: [`SECURITY.md`](SECURITY.md). Day-1 audit report: [`docs/AUDIT.md`](docs/AUDIT.md).
+
+---
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
+Third-party visual assets retain their original licenses; see [`frontend/CREDITS.md`](frontend/CREDITS.md) (game-icons CC BY 3.0, Simple Icons CC0, Spline community CC0).
+
+---
+
+## Acknowledgments
+
+- **lablab.ai / Milan AI Week '26** for the hackathon track + sponsor credits.
+- **Google Vertex AI**, **Featherless**, **Speechmatics**, **Vultr** for the model + audio + compute credits.
+- **Lorc** for the bull and bear silhouettes ([game-icons.net](https://game-icons.net), CC BY 3.0).
+- **21st.dev** for the Spline-component pattern that ships our 3D hero accents.
+
+🤖 Built with [Claude Code](https://claude.com/claude-code) (Anthropic), pair-programming in the loop.
