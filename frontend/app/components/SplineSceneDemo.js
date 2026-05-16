@@ -45,6 +45,18 @@ export default function SplineSceneDemo() {
               />
             </div>
           </div>
+
+          {/* lablab.ai hackathon badge — sits over the lower-right corner of
+              the card like a stamped brass plaque on a chassis. Cannot edit
+              the Spline scene itself without re-uploading from the editor,
+              so the marker is rendered as a DOM overlay instead. */}
+          <div className="pointer-events-none absolute bottom-4 right-4 z-20 hidden sm:block">
+            <div className="rounded-md border border-amber-400/40 bg-black/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-300/90 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.08)] backdrop-blur">
+              <span className="text-amber-200">lablab.ai</span>
+              <span className="mx-2 text-amber-300/40">·</span>
+              <span>Milan AI Week ’26</span>
+            </div>
+          </div>
         </Card>
       </div>
     </section>

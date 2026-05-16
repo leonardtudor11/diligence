@@ -4,7 +4,6 @@ import { useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import Image from "next/image";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -130,8 +129,8 @@ export default function BullBearSplit() {
             The adversarial frame
           </p>
           <h2 className="mt-3 font-display text-3xl font-black sm:text-5xl">
-            Bull <span className="text-destructive">charges</span>.
-            Bear <span className="text-accent">counters</span>.
+            Bull <span className="text-accent">charges</span>.
+            Bear <span className="text-destructive">counters</span>.
           </h2>
           <p className="mt-4 font-mono text-sm leading-relaxed text-foreground/70 sm:text-base">
             Two agents read the same evidence and argue the opposite case. The
@@ -140,62 +139,81 @@ export default function BullBearSplit() {
         </header>
 
         <div className="bb-shake relative grid grid-cols-1 overflow-hidden rounded-2xl border border-border/40 bg-background/40 backdrop-blur md:grid-cols-2">
-          {/* LEFT — BEAR (green per user request) */}
-          <div className="relative flex flex-col items-center gap-6 bg-accent/[0.06] p-10 sm:p-12">
-            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-accent">
+          {/* LEFT — BEAR (red, market-convention bear-side risk colour) */}
+          <div className="relative flex flex-col items-center gap-6 bg-destructive/[0.06] p-10 sm:p-12">
+            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-destructive">
               Bear case · short side
             </p>
-            <Image
-              src="/bear.svg"
-              alt="Bear silhouette"
-              width={240}
-              height={160}
-              className="bb-bear h-32 w-auto"
-              style={{ color: "var(--color-accent)", width: "auto", height: "8rem" }}
-              priority
+            <span
+              role="img"
+              aria-label="Bear silhouette"
+              className="bb-bear block bg-destructive"
+              style={{
+                width: "12rem",
+                height: "8rem",
+                WebkitMaskImage: "url(/bear.svg)",
+                maskImage: "url(/bear.svg)",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+                filter: "drop-shadow(0 6px 18px rgba(239,68,68,0.35))",
+              }}
             />
             <ul className="bb-stat-group w-full max-w-xs space-y-2 font-mono text-sm text-foreground/85">
               <li className="bb-stat flex items-center justify-between border-b border-border/30 py-1">
                 <span>Hedging in Q&amp;A</span>
-                <span className="text-accent">14 flags</span>
+                <span className="text-destructive">14 flags</span>
               </li>
               <li className="bb-stat flex items-center justify-between border-b border-border/30 py-1">
                 <span>Concentration risk</span>
-                <span className="text-accent">3 customers</span>
+                <span className="text-destructive">3 customers</span>
               </li>
               <li className="bb-stat flex items-center justify-between py-1">
                 <span>Margin trajectory</span>
-                <span className="text-accent">−320 bps</span>
+                <span className="text-destructive">−320 bps</span>
               </li>
             </ul>
           </div>
 
-          {/* RIGHT — BULL (red per user request) */}
-          <div className="relative flex flex-col items-center gap-6 bg-destructive/[0.06] p-10 sm:p-12">
-            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-destructive">
+          {/* RIGHT — BULL (green, market-convention long-side positive colour) */}
+          <div className="relative flex flex-col items-center gap-6 bg-accent/[0.06] p-10 sm:p-12">
+            <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-accent">
               Bull case · long side
             </p>
-            <Image
-              src="/bull.svg"
-              alt="Bull silhouette"
-              width={240}
-              height={160}
-              className="bb-bull h-32 w-auto"
-              style={{ color: "var(--color-destructive)", width: "auto", height: "8rem" }}
-              priority
+            <span
+              role="img"
+              aria-label="Bull silhouette"
+              className="bb-bull block bg-accent"
+              style={{
+                width: "12rem",
+                height: "8rem",
+                WebkitMaskImage: "url(/bull.svg)",
+                maskImage: "url(/bull.svg)",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+                transform: "scaleX(-1)",
+                filter: "drop-shadow(0 6px 18px rgba(34,197,94,0.35))",
+              }}
             />
             <ul className="bb-stat-group w-full max-w-xs space-y-2 font-mono text-sm text-foreground/85">
               <li className="bb-stat flex items-center justify-between border-b border-border/30 py-1">
                 <span>Compute demand</span>
-                <span className="text-destructive">+52% YoY</span>
+                <span className="text-accent">+52% YoY</span>
               </li>
               <li className="bb-stat flex items-center justify-between border-b border-border/30 py-1">
                 <span>Pricing power</span>
-                <span className="text-destructive">+18% ASP</span>
+                <span className="text-accent">+18% ASP</span>
               </li>
               <li className="bb-stat flex items-center justify-between py-1">
                 <span>Operating leverage</span>
-                <span className="text-destructive">+410 bps</span>
+                <span className="text-accent">+410 bps</span>
               </li>
             </ul>
           </div>
