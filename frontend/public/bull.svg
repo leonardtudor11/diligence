@@ -1,24 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" aria-label="Bull silhouette" fill="currentColor">
-  <!-- horns -->
-  <path d="M155 32 Q140 8 122 14 Q135 22 142 36 Z"/>
-  <path d="M185 32 Q200 8 218 14 Q205 22 198 36 Z"/>
-  <!-- head -->
-  <ellipse cx="170" cy="58" rx="34" ry="28"/>
-  <!-- snout -->
-  <ellipse cx="200" cy="68" rx="16" ry="12"/>
-  <!-- eye (cut out) -->
-  <circle cx="178" cy="52" r="3" fill="var(--background)"/>
-  <!-- ring in nose -->
-  <circle cx="206" cy="74" r="3" fill="none" stroke="var(--background)" stroke-width="1.5"/>
-  <!-- body -->
-  <path d="M40 80 Q24 70 28 92 L36 110 L44 116 L58 116 L60 100 L100 100 L102 116 L116 116 L122 104 L140 100 L150 84 Z"/>
-  <!-- hump on shoulder -->
-  <path d="M120 60 Q140 50 152 64 L150 84 L120 80 Z"/>
-  <!-- front leg detail -->
-  <rect x="44" y="104" width="6" height="20" rx="1"/>
-  <rect x="58" y="104" width="6" height="20" rx="1"/>
-  <rect x="102" y="104" width="6" height="20" rx="1"/>
-  <rect x="116" y="104" width="6" height="20" rx="1"/>
-  <!-- tail -->
-  <path d="M30 88 Q14 96 10 112 Q18 108 22 104" stroke="currentColor" stroke-width="3" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" fill="currentColor" aria-label="Bull silhouette facing left">
+  <g>
+    <!-- horns curving up from head, left bull -->
+    <path d="M62 36 C46 16 28 14 14 22 C24 32 38 42 56 46 Z"/>
+    <path d="M78 36 C84 18 98 8 116 12 C108 24 96 38 86 46 Z"/>
+
+    <!-- head + jaw, left side -->
+    <path d="M48 70 C42 50 50 38 72 36 C96 36 106 48 102 70 C100 84 90 92 78 92 L60 92 C50 88 46 80 48 70 Z"/>
+
+    <!-- snout extending left -->
+    <path d="M28 76 C18 76 10 80 8 88 C8 96 18 100 30 98 C42 96 50 90 52 84 L48 70 Z"/>
+
+    <!-- eye + nose ring (cut-outs reading as background) -->
+    <circle cx="60" cy="68" r="3" fill="var(--background)"/>
+    <circle cx="16" cy="88" r="3.5" fill="none" stroke="var(--background)" stroke-width="1.5"/>
+
+    <!-- shoulder hump -->
+    <path d="M96 72 C118 50 144 50 162 64 L158 92 L100 96 Z"/>
+
+    <!-- body / torso -->
+    <path d="M88 92 L186 88 C202 88 212 96 214 110 L208 128 L188 128 L184 116 L116 116 L108 128 L86 128 L82 112 C80 104 82 96 88 92 Z"/>
+
+    <!-- legs (front pair + back pair) -->
+    <rect x="92" y="120" width="10" height="28" rx="2"/>
+    <rect x="106" y="120" width="10" height="28" rx="2"/>
+    <rect x="172" y="120" width="10" height="28" rx="2"/>
+    <rect x="186" y="120" width="10" height="28" rx="2"/>
+
+    <!-- hooves accent (background notch at base) -->
+    <rect x="92" y="146" width="10" height="3" fill="var(--background)"/>
+    <rect x="106" y="146" width="10" height="3" fill="var(--background)"/>
+    <rect x="172" y="146" width="10" height="3" fill="var(--background)"/>
+    <rect x="186" y="146" width="10" height="3" fill="var(--background)"/>
+
+    <!-- tail flicked back -->
+    <path d="M210 100 C228 96 234 108 230 120 C226 116 224 112 218 110 L214 102 Z"/>
+
+    <!-- HUD detail line (subtle, reads as scoring mark) -->
+    <line x1="120" y1="106" x2="170" y2="106" stroke="var(--background)" stroke-opacity="0.25" stroke-width="1"/>
+  </g>
 </svg>

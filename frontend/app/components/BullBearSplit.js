@@ -44,39 +44,75 @@ export default function BullBearSplit() {
         defaults: { ease: "power3.out" },
       });
 
-      tl.set(".bb-spark", { opacity: 0, scale: 0 })
-        .from(".bb-bear", { xPercent: -160, opacity: 0, duration: 1.0 })
-        .from(".bb-bull", { xPercent: 160, opacity: 0, duration: 1.0 }, "<")
-        .to(".bb-spark", { opacity: 1, scale: 1.2, duration: 0.35 }, ">-0.05")
-        .to(".bb-spark", { scale: 1, duration: 0.4, ease: "back.out(2)" })
-        .fromTo(
-          ".bb-shake",
-          { x: -6 },
-          { x: 6, duration: 0.06, repeat: 5, yoyo: true, ease: "none" },
+      // Start state — both animals offscreen, spark + stats hidden.
+      gsap.set(".bb-bear", { xPercent: -240, opacity: 0 });
+      gsap.set(".bb-bull", { xPercent: 240, opacity: 0 });
+      gsap.set(".bb-spark", { opacity: 0, scale: 0 });
+      gsap.set(".bb-stat", { opacity: 0, y: 14 });
+
+      tl
+        // Charge inward — accelerating ease so the impact reads as fast.
+        .to(".bb-bear", {
+          xPercent: 0,
+          opacity: 1,
+          duration: 0.9,
+          ease: "power4.in",
+        })
+        .to(
+          ".bb-bull",
+          { xPercent: 0, opacity: 1, duration: 0.9, ease: "power4.in" },
           "<"
         )
-        .from(
+        // Collision: spark pops with overshoot, container shakes once.
+        .to(
+          ".bb-spark",
+          { opacity: 1, scale: 1.4, duration: 0.18, ease: "back.out(3)" },
+          ">-0.06"
+        )
+        .fromTo(
+          ".bb-shake",
+          { x: -8 },
+          { x: 8, duration: 0.06, repeat: 4, yoyo: true, ease: "none" },
+          "<"
+        )
+        // Recoil outward briefly.
+        .to(
+          ".bb-bear",
+          { x: "-=22", duration: 0.12, ease: "power2.out" },
+          "<"
+        )
+        .to(".bb-bull", { x: "+=22", duration: 0.12, ease: "power2.out" }, "<")
+        // Elastic settle back toward center — animals end nose-to-nose.
+        .to(".bb-bear", { x: 0, duration: 0.55, ease: "elastic.out(1, 0.45)" })
+        .to(
+          ".bb-bull",
+          { x: 0, duration: 0.55, ease: "elastic.out(1, 0.45)" },
+          "<"
+        )
+        .to(".bb-spark", { scale: 1, duration: 0.3 }, "<")
+        // Stat lines fade in once the dust settles.
+        .to(
           ".bb-stat",
-          { opacity: 0, y: 14, duration: 0.4, stagger: 0.08 },
-          "-=0.2"
+          { opacity: 1, y: 0, duration: 0.4, stagger: 0.07 },
+          "-=0.25"
         );
 
-      // Idle breathing while in view.
+      // Idle bob — gentler than before so it doesn't compete with the clash.
       gsap.to(".bb-bear", {
-        y: -4,
+        y: -3,
+        duration: 2.0,
+        ease: "sine.inOut",
+        yoyo: true,
+        repeat: -1,
+        delay: 2.5,
+      });
+      gsap.to(".bb-bull", {
+        y: -3,
         duration: 2.2,
         ease: "sine.inOut",
         yoyo: true,
         repeat: -1,
-        delay: 2.2,
-      });
-      gsap.to(".bb-bull", {
-        y: -4,
-        duration: 2.4,
-        ease: "sine.inOut",
-        yoyo: true,
-        repeat: -1,
-        delay: 2.4,
+        delay: 2.7,
       });
     },
     { scope: ref }
@@ -111,11 +147,11 @@ export default function BullBearSplit() {
             </p>
             <Image
               src="/bear.svg"
-              alt="Bear"
-              width={220}
-              height={140}
+              alt="Bear silhouette"
+              width={240}
+              height={160}
               className="bb-bear h-32 w-auto"
-              style={{ color: "var(--color-accent)" }}
+              style={{ color: "var(--color-accent)", width: "auto", height: "8rem" }}
               priority
             />
             <ul className="bb-stat-group w-full max-w-xs space-y-2 font-mono text-sm text-foreground/85">
@@ -141,11 +177,11 @@ export default function BullBearSplit() {
             </p>
             <Image
               src="/bull.svg"
-              alt="Bull"
-              width={220}
-              height={140}
+              alt="Bull silhouette"
+              width={240}
+              height={160}
               className="bb-bull h-32 w-auto"
-              style={{ color: "var(--color-destructive)" }}
+              style={{ color: "var(--color-destructive)", width: "auto", height: "8rem" }}
               priority
             />
             <ul className="bb-stat-group w-full max-w-xs space-y-2 font-mono text-sm text-foreground/85">

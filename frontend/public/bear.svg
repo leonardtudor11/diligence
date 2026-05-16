@@ -1,24 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" aria-label="Bear silhouette" fill="currentColor">
-  <!-- ears -->
-  <circle cx="38" cy="34" r="10"/>
-  <circle cx="68" cy="28" r="10"/>
-  <!-- head -->
-  <ellipse cx="52" cy="56" rx="32" ry="28"/>
-  <!-- snout -->
-  <ellipse cx="22" cy="66" rx="14" ry="10"/>
-  <!-- nose -->
-  <circle cx="14" cy="64" r="3" fill="var(--background)"/>
-  <!-- eye -->
-  <circle cx="48" cy="50" r="3" fill="var(--background)"/>
-  <!-- body -->
-  <path d="M70 70 Q80 60 100 64 L150 64 Q180 64 196 84 L200 100 L188 116 L172 116 L168 104 L120 104 L116 116 L100 116 L92 104 L80 96 Z"/>
-  <!-- legs -->
-  <rect x="100" y="106" width="8" height="22" rx="2"/>
-  <rect x="118" y="106" width="8" height="22" rx="2"/>
-  <rect x="166" y="106" width="8" height="22" rx="2"/>
-  <rect x="184" y="106" width="8" height="22" rx="2"/>
-  <!-- back hump -->
-  <path d="M150 60 Q170 50 188 68 L196 84 L150 80 Z"/>
-  <!-- claws (paw) -->
-  <path d="M16 72 Q18 78 22 80" stroke="currentColor" stroke-width="2" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" fill="currentColor" aria-label="Bear silhouette facing right">
+  <g>
+    <!-- ears on top of head, right side -->
+    <circle cx="166" cy="32" r="13"/>
+    <circle cx="200" cy="28" r="13"/>
+    <!-- inner-ear notches (read as background) -->
+    <circle cx="166" cy="32" r="5" fill="var(--background)"/>
+    <circle cx="200" cy="28" r="5" fill="var(--background)"/>
+
+    <!-- head, right side -->
+    <path d="M148 62 C144 42 158 30 184 30 C210 30 222 44 220 66 C218 82 208 92 192 92 L168 92 C156 90 150 80 148 62 Z"/>
+
+    <!-- snout extending right -->
+    <path d="M214 70 C226 70 232 76 232 84 C232 92 224 96 212 96 C204 96 198 92 196 86 L200 72 Z"/>
+
+    <!-- nose tip -->
+    <ellipse cx="228" cy="80" rx="3.5" ry="3" fill="var(--background)"/>
+
+    <!-- eye -->
+    <circle cx="180" cy="58" r="3" fill="var(--background)"/>
+
+    <!-- big rounded shoulder hump on left side of body -->
+    <path d="M78 64 C56 60 38 76 38 96 L60 100 L100 88 Z"/>
+
+    <!-- body / torso -->
+    <path d="M60 92 L156 92 C168 92 178 100 180 112 L176 128 L156 128 L152 116 L84 116 L80 128 L58 128 L54 114 C50 104 52 96 60 92 Z"/>
+
+    <!-- legs -->
+    <rect x="60" y="120" width="10" height="28" rx="2"/>
+    <rect x="74" y="120" width="10" height="28" rx="2"/>
+    <rect x="138" y="120" width="10" height="28" rx="2"/>
+    <rect x="152" y="120" width="10" height="28" rx="2"/>
+
+    <!-- claws (3 short ticks at front paw) -->
+    <rect x="62" y="146" width="2" height="4" fill="var(--background)"/>
+    <rect x="66" y="146" width="2" height="4" fill="var(--background)"/>
+    <rect x="70" y="146" width="2" height="4" fill="var(--background)"/>
+
+    <!-- HUD detail line on body -->
+    <line x1="70" y1="106" x2="140" y2="106" stroke="var(--background)" stroke-opacity="0.25" stroke-width="1"/>
+  </g>
 </svg>
