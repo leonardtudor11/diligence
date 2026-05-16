@@ -1,0 +1,24 @@
+[Unit]
+Description=Diligence FastAPI backend (agent dashboard data + audio)
+After=network.target
+
+[Service]
+Type=simple
+User=diligence
+WorkingDirectory=/srv/diligence
+Environment=PYTHONUNBUFFERED=1
+Environment=DILIGENCE_DATA_DIR=/srv/diligence/data
+ExecStart=/srv/diligence/.venv/bin/uvicorn backend.api:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Keep the unit boring: no privileges it doesn't need.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
