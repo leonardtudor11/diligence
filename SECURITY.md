@@ -44,7 +44,7 @@ If Claude needs to verify a key works, run a probe script that uses the key — 
 - [ ] `.env` not tracked: `git ls-files | grep -E '^\.env$'` returns nothing
 - [ ] No keys in commit history: `git log -p | grep -E '(api_key|API_KEY|secret|password)' -i`
 - [ ] No real emails leaked beyond what's intentional (`SEC_USER_AGENT` is intentional, login passwords are not)
-- [ ] No internal hostnames or IPs in code (e.g. RobotBoy's `164.90.174.107` belongs in a separate repo, not here)
+- [ ] No internal hostnames or IPs in code (production-server IPs for other projects belong in their own repos, never here)
 
 ---
 
