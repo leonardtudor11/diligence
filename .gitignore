@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Cached primary sources — large, redownloadable
+data/*/raw/
+data/*/transcripts/*.json
+*.mp3
+*.wav
+*.m4a
+
+# Local notes
+notes/
+scratch/
