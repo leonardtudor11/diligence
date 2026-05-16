@@ -21,7 +21,7 @@ import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from services.errors import NoRecentFiling, TickerNotFound
+from services.errors import DiligenceError, NoRecentFiling, TickerNotFound
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -36,18 +36,26 @@ def _client() -> httpx.Client:
     return httpx.Client(headers=_HEADERS, timeout=30, follow_redirects=True)
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+class _EdgarRateLimited(DiligenceError):
+    """EDGAR returned 429 — we are hitting the 10 req/sec ceiling."""
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30))
 def _get_json(url: str) -> dict:
     with _client() as http:
         r = http.get(url)
+        if r.status_code == 429:
+            raise _EdgarRateLimited(f"EDGAR rate-limited on {url}")
         r.raise_for_status()
         return r.json()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30))
 def _get_text(url: str) -> str:
     with _client() as http:
         r = http.get(url)
+        if r.status_code == 429:
+            raise _EdgarRateLimited(f"EDGAR rate-limited on {url}")
         r.raise_for_status()
         return r.text
 

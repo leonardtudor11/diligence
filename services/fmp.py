@@ -35,6 +35,10 @@ def _get(endpoint: str, **params: Any) -> list | dict:
             raise FundamentalsUnavailable(
                 f"FMP {endpoint!r} returned 403 — endpoint is paid-tier or key inactive."
             )
+        if r.status_code == 429:
+            raise FundamentalsUnavailable(
+                f"FMP {endpoint!r} rate-limited (429). Free tier = 250 calls/day."
+            )
         r.raise_for_status()
         return r.json()
 

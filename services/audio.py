@@ -41,6 +41,13 @@ def fetch_earnings_audio(
     Raises AudioNotAvailable if no YouTube result above min_duration_seconds
     matches the search. Search query is constructed from quarter/year if
     provided, otherwise falls back to "latest earnings call full audio".
+
+    SECURITY/CORRECTNESS CAVEAT: ytsearch1 returns the top YouTube hit. Any
+    uploader can publish a fake or AI-generated earnings-call clip. The
+    duration > 1200s filter blocks summaries and clips but does not
+    authenticate the speaker or content. Day-2 agents should surface the
+    source URL + uploader in the UI and tag claims sourced from this audio
+    as `confidence=unverified` until manually approved. See HANDOFF.md.
     """
     _need("yt-dlp")
     _need("ffmpeg")
@@ -69,9 +76,11 @@ def fetch_earnings_audio(
     ]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode != 0:
+        # yt-dlp stderr can include absolute local paths; surface only the last line.
+        stderr_last = (result.stderr or "").strip().splitlines()
+        hint = stderr_last[-1] if stderr_last else "(no stderr)"
         raise AudioNotAvailable(
-            f"yt-dlp exited {result.returncode} searching for {query!r}. "
-            f"stderr tail: {(result.stderr or '')[-300:]}"
+            f"yt-dlp exited {result.returncode} searching for {query!r}. {hint}"
         )
     if not out_file.exists() or out_file.stat().st_size < MIN_AUDIO_BYTES:
         raise AudioNotAvailable(

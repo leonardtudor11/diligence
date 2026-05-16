@@ -56,10 +56,16 @@ def _submit(audio_path: Path, language: str) -> str:
             },
         )
         if r.status_code >= 400:
+            # Avoid logging raw response body — Speechmatics may echo request metadata.
             raise TranscriptionFailed(
-                f"Speechmatics submission HTTP {r.status_code}: {r.text[:300]}"
+                f"Speechmatics submission HTTP {r.status_code} (reason: {r.reason_phrase!r})"
             )
-        return r.json()["id"]
+        try:
+            return r.json()["id"]
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            raise TranscriptionFailed(
+                f"Speechmatics returned malformed submission response: {type(e).__name__}"
+            ) from e
 
 
 def _wait_for_done(job_id: str) -> None:
@@ -69,7 +75,13 @@ def _wait_for_done(job_id: str) -> None:
         while time.time() < deadline:
             r = http.get(f"{BASE}/jobs/{job_id}", headers=_headers())
             r.raise_for_status()
-            status = r.json()["job"]["status"]
+            try:
+                status = r.json()["job"]["status"]
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                raise TranscriptionFailed(
+                    f"Speechmatics returned malformed status payload for job {job_id} "
+                    f"({type(e).__name__})"
+                ) from e
             if status != last_status:
                 log.info("Speechmatics job %s: %s", job_id, status)
                 last_status = status
