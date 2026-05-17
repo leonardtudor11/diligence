@@ -2,9 +2,10 @@
 
 **Adversarial multi-agent due-diligence on public-company tickers.**
 
-🔗 Live demo · http://80.240.26.175
-📺 Walk-through · _coming with submission_
-🏆 Track · [lablab.ai Milan AI Week '26](https://lablab.ai/) — Gemini · Featherless · Speechmatics · Vultr
+🔗 Live · https://diligence.duckdns.org
+📺 Walk-through · _link added with hackathon submission_
+🏆 Track · [lablab.ai Milan AI Week '26](https://lablab.ai/) — Vertex AI Gemini · Featherless · Speechmatics · Vultr
+💸 Cost · ~$1.25 per fresh ticker ($0.21 Gemini + $1.04 Speechmatics enhanced); cached re-runs free
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Stack](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](frontend/)
@@ -73,18 +74,49 @@ Orchestrated by **LangGraph** (`StateGraph`, parallel Bull + Bear via `asyncio.g
 
 ---
 
-## Status (2026-05-17)
+## Status (2026-05-18)
 
 | Layer | State |
 |-------|-------|
-| Ingestion pipeline | ✅ End-to-end on NVDA (10-K + 10-Q + audio + transcript + fundamentals + manifest) |
+| Ingestion pipeline (EDGAR + FMP + yt-dlp + Speechmatics) | ✅ Live; NVDA, TSLA, PLTR cached |
+| Autonomous tier-scored audio candidate selector (T1 → T4) | ✅ Live; per-candidate audit in `manifest.sources.audio` |
 | Pydantic schemas (`agents/schemas.py`) | ✅ Citation, Claim, FilingAnalysis, CallAnalysis, BullCase, BearCase, Reconciliation |
-| Research questions (`docs/RESEARCH.md`) | ✅ All five resolved before agent code (async genai, nested schemas, JSON fences, LangGraph dict merge, prompt-injection wrap) |
-| Filing / Call / Bull / Bear / Reconciler agents | 🟡 In progress |
-| LangGraph orchestrator (`agents/graph.py`) | 🟡 Pending |
-| FastAPI backend on Vultr | 🟡 Pending |
-| Frontend (landing) | ✅ Live at http://80.240.26.175 |
-| Demo video | 🟡 Pending |
+| Research questions (`docs/RESEARCH.md`) | ✅ All five resolved before agent code |
+| Filing / Call / Bull / Bear / Reconciler agents | ✅ Shipped (LangGraph parallel-write reducer, per-node cache reuse) |
+| FastAPI backend on Vultr (REST + SSE + ranged audio) | ✅ Live behind nginx + systemd |
+| Frontend (landing + `/research/[ticker]` dashboard + `/methodology`) | ✅ Live at https://diligence.duckdns.org |
+| Adversarial security review (CORS, X-Forwarded-For, SSE dedupe, atomic manifest writes, SSRF defence) | ✅ 154 findings, top-severity all fixed |
+| Day-5 UI revamp — 7 surgical sessions | ✅ Merged + deployed |
+| HTTPS via DuckDNS + Let's Encrypt | ✅ `https://diligence.duckdns.org`, auto-renew |
+| Demo video | 🟡 Pending — only blocker for hackathon submission |
+
+---
+
+## Build journey — five stages
+
+| # | Stage | Shipped | Receipt |
+|---|-------|---------|---------|
+| 1 | **The Bet** — primary-source cache | NVDA, TSLA, PLTR fully ingested. 364K-char 10-K, 170K-char 10-Q, ~60min earnings call, 10k+ word-level diarized transcript tokens per ticker. | `data/{T}/{10k,10q,fundamentals}.json` + `earnings_call.mp3` + `transcript.json` + `manifest.json` |
+| 2 | **The Brains** — five adversarial agents | Filing Analyst (~30 atomic claims, char-range citations). Call Analyst (~27 claims + hedging examples, speaker + timestamp citations). Bull + Bear (Featherless Qwen3-32B) argue from shared claim pool. Reconciler ranks disputed facts 1–10 by materiality. | `analysis_{filing,call,bull,bear}.json` + `reconciliation.json`. PLTR: 3 disputed facts at materiality 10/8/8, 100% transcript diarization. |
+| 3 | **The Cockpit** — dashboard | Next.js 16 + React 19 + Tailwind 4 + Recharts + wavesurfer.js v7. Three-column bull / disputed / bear; click chart bar → swap focus card; click claim chip → seek transcript audio or open SEC URL. | Live: https://diligence.duckdns.org/research/PLTR |
+| 4 | **The Stress Test** — adversarial review + autonomous audio selector | 3 Claude sub-agents ran in parallel dismantle mode: 154 findings (4 CRITICAL, 7 HIGH). CORS lockdown, X-Forwarded-For LAST-hop parsing, SSE seq dedupe, atomic manifest writes, SSRF defence on audio fetches, yt-dlp `--dump-json`. Autonomous YouTube candidate selector: 5-dim scoring across ≤16 candidates, tier T1 issuer-named → T4 unverified, gated by `MIN_CANDIDATE_SCORE=50`. | `services/audio.py:find_best_audio_candidate` + `manifest.sources.audio.candidates_considered` |
+| 5 | **The Reveal** — UI polish + HTTPS | 7 surgical UI sessions (per-claim ⚠/§ badges, `?fact=N` permalink, claim chip → seek/SEC URL, dashboard-wide citation interactivity, audit candidates table polish). HTTPS via DuckDNS + Let's Encrypt + certbot auto-renew on Vultr nginx. | https://diligence.duckdns.org (Let's Encrypt cert, expires 2026-08-15, auto-renew) |
+
+---
+
+## Cost per ticker
+
+| Service | Component | Cost (fresh ingest) | Notes |
+|---------|-----------|---------------------|-------|
+| Vertex AI Gemini 2.5 Pro | Filing Analyst | ~$0.13 | 91K input + 5K output tokens |
+| Vertex AI Gemini 2.5 Pro | Call Analyst | ~$0.05 | 25K + 3K |
+| Vertex AI Gemini 2.5 Pro | Reconciler | ~$0.03 | 10K + 3K |
+| Speechmatics | Diarized batch ASR (enhanced) | ~$1.04 | ~1 hr call × $1.04/hr tier-1 |
+| Featherless | Bull + Bear (Qwen3-32B) | $0 marginal | Flat $25/mo plan |
+| FMP / SEC EDGAR / yt-dlp | Fundamentals + filings + audio source | $0 | Free tier / public |
+| **Total** | | **~$1.25** | |
+
+Cached re-runs (`agents.run TICKER --reuse-cache`): **$0** — every node short-circuits on `data/{T}/analysis_*.json`.
 
 ---
 
