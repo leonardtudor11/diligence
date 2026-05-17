@@ -1,6 +1,74 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 (Day 4 complete — autonomous tiered selector + ingest-aware POST + full adversarial pass + 13 fixes shipped; Vultr live; only Phase 9 demo video left + a few elective items).
+Last updated: 2026-05-17 evening (Day-5 UI revamp in progress on branch `revamp/day5-ui` — NOT merged to main yet; Vultr still on `main`/`609cb63`).
+
+## Day-5 UI/UX revamp (branch `revamp/day5-ui`)
+
+Adversarial 3-prong pass: Playwright screenshot capture, Claude general-purpose UI/UX critique agent (26 findings + 5 demo-blockers), and a Codex CLI adversarial review that was launched but hung in the gpt-5-codex reasoning phase at 52m elapsed (cancelled — no findings returned beyond the file-reading phase). Findings dossier at `/tmp/diligence-uxaudit/ux-findings.md`. Codex hang appears to be a known issue with large-context reviews; revisit only if a future session has time to budget 60+ min for a single review.
+
+### Commits on `revamp/day5-ui`
+
+- `6e61631` revamp/day5: demo-blocker fixes + chart palette (commit 1/N)
+- `680c018` revamp/day5: bump SplineChartsDemo rootMargin to 1200px
+- (one more incoming with the ZZZZZ UX fix + HANDOFF update)
+
+### What changed visually
+
+- **DisputedFactsChart full repaint** (`frontend/app/research/[ticker]/DisputedFactsChart.js`). New palette ties the dashboard back to the landing-page Spline 3D-charts surface: bright emerald gradient on the focused row, magenta→purple gradient for materiality ≥8, violet for 5-7, muted slate for low. SVG gaussian-blur glow on the active bar. Deferred mount via `useState`+`useEffect` so Recharts' ResponsiveContainer has actual offsetWidth/offsetHeight to measure — eliminates the `width(-1) height(-1)` flash on dashboard load.
+- **BullBearSplit blank-pre-scroll fix** (`frontend/app/components/BullBearSplit.js`). `gsap.set` was parking animals offscreen at mount BEFORE ScrollTrigger fired, section was black for ~600ms. Moved initial state into `tl.set` so animals stay visible until the trigger actually fires.
+- **SplineChartsDemo lazy-mount** (`frontend/app/components/SplineChartsDemo.js`). IntersectionObserver with 1200px rootMargin defers the second WebGL scene; cuts the initial-paint ReadPixels stalls in half.
+- **Dashboard top-bar grid layout** (`frontend/app/research/[ticker]/Dashboard.js`). Was flex-wrap — badges floated detached from H1 on desktop and orphaned on mobile. Now `grid-cols-1 lg:grid-cols-[1fr_auto]` so badges land cleanly under the title at <lg and tucked right at ≥lg.
+- **NotIngestedYet junk-ticker guard** (`frontend/app/research/[ticker]/NotIngestedYet.js`). `JUNK_RE` heuristic for placeholder tickers (ZZZZZ, XXXXX, TEST, AAAA, all-same-character). Persistent amber "Run anyway" button + warning instead of the previous green "Run diligence" that would happily spend on garbage input.
+- **PillarColumn claim-chip excerpts** (`frontend/app/research/[ticker]/PillarColumn.js`). Chips now render `F-001 · "Revenue grew 32%…"` instead of bare `F-001`. Judges in a 3-minute demo recording don't hover for tooltips.
+- **Confidence-downgrade banner contrast** (`Dashboard.js`). Eyebrow `text-yellow-300/80` → `text-yellow-200` (was failing WCAG AA at ~3.2:1).
+- **ProgressModal active-step polish** (`frontend/app/components/ProgressModal.js`). Pulsing dot is now accent-green with halo instead of muted gray.
+- **globals.css palette extension**: added `--accent-bright`, `--accent-deep`, `--materia`, `--materia-bright`, `--materia-deep` with matching Tailwind 4 `@theme inline` aliases.
+- **SampleDisputedFact copy honesty** (`SampleDisputedFact.js`). Removed the stale "Live runs ship once the agent layer is wired" line; agents have been live since Day-2.
+
+### Rollback path (if revamp fails the demo)
+
+```bash
+# On the Vultr box, you don't need to do anything — main is unchanged
+# and that's what's deployed. Just keep main as-is.
+ssh root@80.240.26.175 'cd /srv/diligence && git status && git rev-parse HEAD'
+# expected: clean, HEAD == 609cb63
+
+# Local rollback (delete revamp branch if you want it gone):
+git checkout main
+git branch -D revamp/day5-ui
+
+# Local rollback (keep revamp branch, just go back to main):
+git checkout main
+```
+
+### Promotion path (if revamp passes review)
+
+```bash
+# Local
+git checkout main
+git merge --ff-only revamp/day5-ui
+git push origin main
+
+# Vultr deploy
+ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git pull --ff-only && cd frontend && sudo -u diligence npm ci --no-audit --no-fund && sudo -u diligence npm run build && systemctl restart diligence-frontend'
+```
+
+### Day-5 verification artifacts
+
+- Pre-revamp screenshots: `/tmp/diligence-uxaudit/*.png` (31 PNGs of live Vultr `main` at the time of audit)
+- Post-revamp screenshots: `/tmp/diligence-uxaudit/after/*.png`
+- UI/UX findings dossier: `/tmp/diligence-uxaudit/ux-findings.md`
+- Playwright drivers: `/tmp/diligence-uxaudit/capture.py` + `capture_local.py` + `interact_local.py`
+
+### Items deliberately not touched in Day-5 revamp
+
+- **Codex backend tech-debt** (the 9 punted items from Day-4 + the SSE-reconnect MEDIUM from Codex 2026-05-17). Untouched because the Codex review hung before producing severity-ranked findings; merging them into the revamp branch would be guesswork. Leave for Day-6.
+- **Methodology page pipeline SVG diagram**. UI/UX agent flagged "100% text wall" but a quality SVG pipeline is ~3h of careful work and not demo-critical.
+- **Dashboard top-bar tab strip revamp**. Bigger structural change. The grid-layout fix already solves the overflow problem; the tab strip is polish.
+- **Agent-graph SVG replacing the Spline robot**. UI/UX agent's #1 revamp suggestion. Would replace the existing Spline scene wholesale — risky this close to demo.
+- **Hero subtitle compression / typography re-rank**. The Hero is already in a defensible state; further tuning is a coin flip.
+
+---
 
 ## Day-4 progress — DONE (commits `7d16267` → `fd0c6da`, 13 commits on `main`, all pushed)
 

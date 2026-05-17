@@ -15,21 +15,18 @@ const JUNK_RE = /^(.)\1{1,}$|^(XXX|ZZZ|TEST|AAAA|JUNK|NULL)/i;
 export default function NotIngestedYet({ ticker }) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
-  const [confirmed, setConfirmed] = useState(false);
 
   const valid = TICKER_RE.test(ticker);
   const looksJunk = valid && JUNK_RE.test(ticker || "");
 
+  // Single-click submit; the persistent amber button + warning above
+  // already communicate that this isn't a real ticker. A 2-click confirm
+  // pattern got UX-confused: state flipped the button BACK to green
+  // after the warning, so users on the second view thought they'd hit
+  // a different control.
   const launch = async () => {
     if (!valid) {
       setError(`'${ticker}' is not a valid ticker. Expected 1–6 letters or digits (e.g. NVDA).`);
-      return;
-    }
-    if (looksJunk && !confirmed) {
-      setError(
-        `'${ticker}' looks like a placeholder, not a real ticker. Running the pipeline still spends API credits. Click "Run anyway" to confirm.`
-      );
-      setConfirmed(true);
       return;
     }
     setError(null);
@@ -73,14 +70,10 @@ export default function NotIngestedYet({ ticker }) {
         onClick={launch}
         disabled={!valid}
         className={`mt-7 inline-flex h-12 items-center justify-center rounded-md px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
-          looksJunk && !confirmed
-            ? "bg-yellow-500 text-background"
-            : "bg-accent"
+          looksJunk ? "bg-yellow-500" : "bg-accent"
         }`}
       >
-        {looksJunk && !confirmed
-          ? `Run anyway on ${ticker}`
-          : `Run diligence on ${ticker}`}
+        {looksJunk ? `Run anyway on ${ticker}` : `Run diligence on ${ticker}`}
       </button>
 
       {error ? (
