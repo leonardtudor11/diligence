@@ -9,12 +9,18 @@ import TranscriptPlayer from "./TranscriptPlayer";
 import AuditTab from "./AuditTab";
 
 export default function Dashboard({ ticker, payload }) {
-  const { agents, transcript_words: words = [], has_audio } = payload;
+  const { agents, transcript_words: words = [], has_audio, manifest } = payload;
   const reconciliation = agents.reconciliation;
   const bull = agents.bull;
   const bear = agents.bear;
   const filing = agents.filing;
   const call = agents.call;
+  const audioSource = manifest?.sources?.audio || null;
+  const filingSources = {
+    "10-K": manifest?.sources?.["10k"] || null,
+    "10-Q": manifest?.sources?.["10q"] || null,
+  };
+  const manifestWarnings = manifest?.warnings || [];
 
   const [activeFactIdx, setActiveFactIdx] = useState(0);
   const [showAudit, setShowAudit] = useState(false);
@@ -87,6 +93,9 @@ export default function Dashboard({ ticker, payload }) {
           shared={reconciliation?.shared_ground ?? []}
           filingInjected={filing?.injection_detected}
           callInjected={call?.injection_detected}
+          filingSources={filingSources}
+          audioSource={audioSource}
+          manifestWarnings={manifestWarnings}
         />
       )}
 
@@ -166,7 +175,7 @@ export default function Dashboard({ ticker, payload }) {
           until an authoritative source is wired in.
         </p>
         {has_audio ? (
-          <TranscriptPlayer ticker={ticker} words={words} />
+          <TranscriptPlayer ticker={ticker} words={words} audioSource={audioSource} />
         ) : (
           <p className="font-mono text-sm text-foreground/50">No audio cached.</p>
         )}

@@ -22,9 +22,18 @@ function speakerColor(label) {
   return SPEAKER_COLORS[(n - 1) % SPEAKER_COLORS.length];
 }
 
-export default function TranscriptPlayer({ ticker, words }) {
+// Tier label → short badge text + accent class for the provenance header.
+const TIER_BADGE = {
+  T1_verified_primary:    { short: "T1", text: "Verified primary",     accent: "bg-accent/20 text-accent border-accent/40" },
+  T2_trusted_aggregator:  { short: "T2", text: "Trusted aggregator",   accent: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
+  T3_editorial_aggregator:{ short: "T3", text: "Editorial aggregator", accent: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40" },
+  T4_unverified:          { short: "T4", text: "Unverified",            accent: "bg-foreground/15 text-foreground/70 border-border/60" },
+};
+
+export default function TranscriptPlayer({ ticker, words, audioSource }) {
   const containerRef = useRef(null);
   const audioUrl = apiUrl(`/api/research/${ticker}/audio`);
+  const badge = audioSource?.tier ? TIER_BADGE[audioSource.tier] : null;
 
   const { wavesurfer, isReady, isPlaying, currentTime } = useWavesurfer({
     container: containerRef,
@@ -98,6 +107,41 @@ export default function TranscriptPlayer({ ticker, words }) {
 
   return (
     <div className="space-y-4">
+      {audioSource ? (
+        <div className="rounded-md border border-border/40 bg-background/30 px-4 py-3 text-xs font-mono">
+          <div className="flex flex-wrap items-center gap-2 text-foreground/70">
+            <span className="uppercase tracking-[0.25em] text-foreground/40">Source</span>
+            {audioSource.url ? (
+              <a
+                href={audioSource.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-foreground hover:text-accent"
+              >
+                {audioSource.uploader || audioSource.url}
+              </a>
+            ) : (
+              <span className="font-semibold text-foreground">{audioSource.uploader}</span>
+            )}
+            {badge ? (
+              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${badge.accent}`}>
+                {badge.short} · {badge.text}
+              </span>
+            ) : null}
+            {typeof audioSource.score === "number" ? (
+              <span className="text-foreground/45">score {audioSource.score}</span>
+            ) : null}
+            {audioSource.candidates_considered?.length ? (
+              <span className="text-foreground/45">
+                · {audioSource.candidates_considered.length} candidate{audioSource.candidates_considered.length === 1 ? "" : "s"} considered
+              </span>
+            ) : null}
+          </div>
+          {audioSource.title ? (
+            <p className="mt-1 text-foreground/55">{audioSource.title}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="rounded-md border border-border/40 bg-background/40 p-3">
         <div ref={containerRef} className="w-full" />
         <div className="mt-3 flex items-center justify-between">
