@@ -66,6 +66,7 @@ Tracked from the same 3-agent review:
 - **Re-order recency vs report-date** — `services/ingest.py` passes `filings["10-Q"].filed` (the post-call filing date, ~4-6 wk after the call). Should pass `report_date` (period-end). Today's selector still wins on real demo tickers but the math is wrong on a corner case.
 - **Cascade `_normalize_issuer`** — single-pass regex leaves "Alibaba Group Holding" after stripping `Limited`. A second pass would strip `Holding`. Today not hurting NVDA/TSLA/PLTR.
 - **Prompt-injection sanity check post-Speechmatics** — paranoid mode rejecting claims whose `evidence_excerpt` matches "ignore previous instructions" etc.
+- **SSE reconnect after disconnect doesn't tail live events** (Codex review 2026-05-17, MEDIUM). After the first SSE client disconnects, `_RUN_QUEUES[run_id]` is popped; `_emit` keeps appending to `_RUN_EVENTS_LOG` but has no live queue, so subsequent emits never reach a reconnecting client. Reconnect replays log → sees `q is None` → returns → frontend's `onerror` fires false "Stream closed unexpectedly" message. Multi-tab on same run_id has the same shape (single-consumer queue). Fix: do NOT pop `_RUN_QUEUES` on consumer disconnect while the run is `running` in `_RUN_META`; OR switch to per-subscriber tailing of `_RUN_EVENTS_LOG` keyed by `max_seq` (each subscriber polls the log independently). Not blocking the demo (single-client, no reconnect mid-run); fix during Day-5 hardening pass.
 
 ### Vultr live state at handoff time
 

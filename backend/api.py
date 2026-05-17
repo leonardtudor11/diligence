@@ -482,6 +482,18 @@ async def _run_full_pipeline_bg(
             else:
                 await _emit(run_id, {"event": "ingest_cached"})
 
+            # RECOMPUTE cache state INSIDE the lock. The POST handler's
+            # full_cache decision was made before this coroutine queued
+            # on the lock — two concurrent cold POSTs for the same ticker
+            # would both have reuse_cache=False at that point. After the
+            # first run writes reconciliation.json, the second wakes up
+            # here and we MUST force reuse_cache=True so the agent graph
+            # short-circuits instead of re-spending Gemini + Featherless
+            # on outputs that already exist on disk. Codex 2026-05-17.
+            reconciliation_path = td / "reconciliation.json"
+            if reconciliation_path.exists() and not force:
+                reuse_cache = True
+
             from agents.graph import build_graph
             graph = build_graph()
             initial = {
