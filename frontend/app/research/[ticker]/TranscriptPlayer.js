@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useWavesurfer } from "@wavesurfer/react";
 import { apiUrl } from "../../../lib/api";
 
@@ -51,7 +51,10 @@ function safeHref(url) {
   return url;
 }
 
-export default function TranscriptPlayer({ ticker, words, audioSource }) {
+const TranscriptPlayer = forwardRef(function TranscriptPlayer(
+  { ticker, words, audioSource },
+  ref
+) {
   const containerRef = useRef(null);
   const audioUrl = apiUrl(`/api/research/${ticker}/audio`);
   const badge = audioSource?.tier ? TIER_BADGE[audioSource.tier] : null;
@@ -122,6 +125,41 @@ export default function TranscriptPlayer({ ticker, words, audioSource }) {
     wavesurfer.setTime(Math.max(0, word.start_time - 0.05));
     if (!isPlaying) wavesurfer.play();
   }
+
+  // When the claim-chip seek arrives before wavesurfer has loaded the
+  // audio (judges click within the first ~600ms), queue the request and
+  // apply it as soon as isReady flips true. Cleared after one apply so a
+  // late-mount doesn't yank the user away from a position they have
+  // since changed by hand.
+  const pendingSeekRef = useRef(null);
+  useEffect(() => {
+    if (!isReady || !wavesurfer || pendingSeekRef.current === null) return;
+    const t = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    if (!wavesurfer.getDuration?.()) return;
+    wavesurfer.setTime(Math.max(0, t - 0.05));
+    wavesurfer.play?.();
+  }, [isReady, wavesurfer]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      seek(seconds, { autoplay = true } = {}) {
+        if (typeof seconds !== "number" || !Number.isFinite(seconds)) return;
+        if (!wavesurfer || !wavesurfer.getDuration?.()) {
+          pendingSeekRef.current = seconds;
+          return;
+        }
+        wavesurfer.setTime(Math.max(0, seconds - 0.05));
+        if (autoplay && !isPlaying) wavesurfer.play?.();
+      },
+      play() {
+        if (!wavesurfer || isPlaying) return;
+        wavesurfer.play?.();
+      },
+    }),
+    [wavesurfer, isPlaying]
+  );
 
   // Group adjacent words by speaker into paragraphs for readability.
   const paragraphs = useMemo(() => groupBySpeaker(words), [words]);
@@ -225,7 +263,9 @@ export default function TranscriptPlayer({ ticker, words, audioSource }) {
       </div>
     </div>
   );
-}
+});
+
+export default TranscriptPlayer;
 
 function groupBySpeaker(words) {
   const out = [];

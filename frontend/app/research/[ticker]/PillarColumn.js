@@ -8,6 +8,9 @@ export default function PillarColumn({
   pillars,
   concessions,
   claimIndex,
+  onClaimAction,
+  filingSources,
+  hasAudio,
 }) {
   const isBull = tone === "bull";
   const accent = isBull ? "text-accent border-accent/40 bg-accent/5" : "text-destructive border-destructive/40 bg-destructive/5";
@@ -42,7 +45,15 @@ export default function PillarColumn({
             {p.cited_claim_ids?.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {p.cited_claim_ids.map((id) => (
-                  <ClaimChip key={id} id={id} claim={claimIndex[id]} tone={tone} />
+                  <ClaimChip
+                    key={id}
+                    id={id}
+                    claim={claimIndex[id]}
+                    tone={tone}
+                    onAction={onClaimAction}
+                    filingSources={filingSources}
+                    hasAudio={hasAudio}
+                  />
                 ))}
               </div>
             )}
@@ -69,7 +80,7 @@ export default function PillarColumn({
   );
 }
 
-function ClaimChip({ id, claim, tone }) {
+function ClaimChip({ id, claim, tone, onAction, filingSources, hasAudio }) {
   const isUnverified = claim?.confidence === "unverified_audio";
   const isAccounting = !!claim?.accounting_flag;
 
@@ -88,17 +99,44 @@ function ClaimChip({ id, claim, tone }) {
     ? "ring-1 ring-amber-300/55"
     : "";
 
+  // Resolve whether this chip has somewhere to jump to. Call chips need
+  // audio + a start_time; filing chips need a known SEC URL. Anything
+  // else stays a passive tooltip span so unverifiable claims aren't
+  // dressed up as interactive.
+  const srcType = claim?.source?.type;
+  let actionable = false;
+  let actionLabel = null;
+  if (
+    srcType === "call" &&
+    typeof claim?.source?.start_time === "number" &&
+    hasAudio &&
+    typeof onAction === "function"
+  ) {
+    actionable = true;
+    actionLabel = `Jump to ${fmtClock(claim.source.start_time)} in transcript`;
+  } else if (
+    (srcType === "10-K" || srcType === "10-Q") &&
+    filingSources?.[srcType]?.url &&
+    typeof onAction === "function"
+  ) {
+    actionable = true;
+    actionLabel = `Open ${srcType} on SEC.gov`;
+  }
+
   const titleParts = [claim?.text || `Unknown claim ${id}`];
+  if (actionLabel) titleParts.push(actionLabel);
   if (isUnverified) titleParts.push("⚠ Unverified audio — see confidence banner");
   if (isAccounting) titleParts.push("§ Flagged for accounting language");
   const title = titleParts.join("  ·  ");
 
   const excerpt = claim?.text ? truncate(claim.text, 40) : null;
-  return (
-    <span
-      title={title}
-      className={`group cursor-help inline-flex max-w-full items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono text-[10px] ${baseColor} ${flagColor}`}
-    >
+  const cursorClass = actionable
+    ? "cursor-pointer hover:brightness-110"
+    : "cursor-help";
+  const className = `group inline-flex max-w-full items-center gap-1.5 rounded border px-1.5 py-0.5 text-left font-mono text-[10px] ${baseColor} ${flagColor} ${cursorClass}`;
+
+  const body = (
+    <>
       {isUnverified ? (
         <span aria-label="unverified audio source" className="text-yellow-300">
           ⚠
@@ -114,8 +152,38 @@ function ClaimChip({ id, claim, tone }) {
           {excerpt}
         </span>
       ) : null}
+    </>
+  );
+
+  if (actionable) {
+    return (
+      <button
+        type="button"
+        title={title}
+        aria-label={actionLabel}
+        onClick={(e) => {
+          e.stopPropagation();
+          onAction(claim);
+        }}
+        className={className}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <span title={title} className={className}>
+      {body}
     </span>
   );
+}
+
+function fmtClock(t) {
+  if (!Number.isFinite(t)) return "0:00";
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 function truncate(s, n) {

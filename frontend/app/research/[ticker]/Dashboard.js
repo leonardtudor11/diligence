@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DisputedFactsChart from "./DisputedFactsChart";
@@ -74,6 +74,35 @@ export default function Dashboard({ ticker, payload }) {
   }, [filing, call]);
 
   const activeFact = disputed[activeFactIdx];
+
+  // Refs the claim-chip dispatcher needs:
+  //   transcriptRef    — imperative handle exposing seek() on TranscriptPlayer
+  //   transcriptSectionRef — scroll target for call chips
+  const transcriptRef = useRef(null);
+  const transcriptSectionRef = useRef(null);
+
+  // Single dispatcher: call-claim chip seeks transcript + scrolls; filing
+  // chip opens the SEC URL in a new tab. Chips without an actionable
+  // source stay non-interactive (rendered as <span> by ClaimChip).
+  const handleClaimAction = useCallback(
+    (claim) => {
+      if (!claim?.source) return;
+      const t = claim.source.type;
+      if (t === "call" && typeof claim.source.start_time === "number" && has_audio) {
+        transcriptSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        transcriptRef.current?.seek(claim.source.start_time);
+        return;
+      }
+      if (t === "10-K" || t === "10-Q") {
+        const url = filingSources[t]?.url;
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }
+    },
+    [filingSources, has_audio]
+  );
 
   return (
     <main className="flex flex-1 flex-col px-6 py-10 sm:px-10">
@@ -163,6 +192,9 @@ export default function Dashboard({ ticker, payload }) {
           pillars={bull?.pillars ?? []}
           concessions={bull?.counter_arguments_acknowledged ?? []}
           claimIndex={claimIndex}
+          onClaimAction={handleClaimAction}
+          filingSources={filingSources}
+          hasAudio={has_audio}
         />
 
         <div>
@@ -201,11 +233,17 @@ export default function Dashboard({ ticker, payload }) {
           pillars={bear?.pillars ?? []}
           concessions={bear?.counter_arguments_acknowledged ?? []}
           claimIndex={claimIndex}
+          onClaimAction={handleClaimAction}
+          filingSources={filingSources}
+          hasAudio={has_audio}
         />
       </section>
 
       {/* Transcript player */}
-      <section className="mt-10 rounded-lg border border-border/40 bg-secondary/20 p-5">
+      <section
+        ref={transcriptSectionRef}
+        className="mt-10 rounded-lg border border-border/40 bg-secondary/20 p-5"
+      >
         <h2 className="mb-2 font-display text-lg font-bold tracking-wide">
           Earnings call — click any word to jump to that moment
         </h2>
@@ -215,7 +253,12 @@ export default function Dashboard({ ticker, payload }) {
           until an authoritative source is wired in.
         </p>
         {has_audio ? (
-          <TranscriptPlayer ticker={ticker} words={words} audioSource={audioSource} />
+          <TranscriptPlayer
+            ref={transcriptRef}
+            ticker={ticker}
+            words={words}
+            audioSource={audioSource}
+          />
         ) : (
           <p className="font-mono text-sm text-foreground/50">No audio cached.</p>
         )}
