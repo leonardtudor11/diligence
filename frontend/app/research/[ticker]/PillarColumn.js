@@ -70,19 +70,44 @@ export default function PillarColumn({
 }
 
 function ClaimChip({ id, claim, tone }) {
-  const color =
+  const isUnverified = claim?.confidence === "unverified_audio";
+  const isAccounting = !!claim?.accounting_flag;
+
+  const baseColor =
     tone === "bull"
       ? "border-accent/30 bg-accent/10 text-accent"
       : "border-destructive/30 bg-destructive/10 text-destructive";
-  const title = claim?.text || `Unknown claim ${id}`;
-  // Inline the first chunk of the claim text so judges scanning the
-  // dashboard don't have to hover every chip to see what it represents.
-  const excerpt = claim?.text ? truncate(claim.text, 42) : null;
+  // Yellow ring marks call claims sourced from unverified audio (the
+  // confidence_downgrade_reason banner is the top-of-page summary; the
+  // ring tells the judge WHICH specific cited claim is downgraded).
+  // Amber ring marks filing claims with accounting_flag — the call-out
+  // mirrors what the Filing Analyst surfaces in its analysis dump.
+  const flagColor = isUnverified
+    ? "ring-1 ring-yellow-400/55"
+    : isAccounting
+    ? "ring-1 ring-amber-300/55"
+    : "";
+
+  const titleParts = [claim?.text || `Unknown claim ${id}`];
+  if (isUnverified) titleParts.push("⚠ Unverified audio — see confidence banner");
+  if (isAccounting) titleParts.push("§ Flagged for accounting language");
+  const title = titleParts.join("  ·  ");
+
+  const excerpt = claim?.text ? truncate(claim.text, 40) : null;
   return (
     <span
       title={title}
-      className={`group cursor-help inline-flex max-w-full items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono text-[10px] ${color}`}
+      className={`group cursor-help inline-flex max-w-full items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono text-[10px] ${baseColor} ${flagColor}`}
     >
+      {isUnverified ? (
+        <span aria-label="unverified audio source" className="text-yellow-300">
+          ⚠
+        </span>
+      ) : isAccounting ? (
+        <span aria-label="accounting flag" className="text-amber-300">
+          §
+        </span>
+      ) : null}
       <span className="font-semibold">{id}</span>
       {excerpt ? (
         <span className="hidden truncate text-foreground/70 sm:inline-block sm:max-w-[18ch]">
