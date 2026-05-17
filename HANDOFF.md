@@ -1,6 +1,16 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 night (Day-5 UI revamp **COMPLETE + DEPLOYED**: `main` and Vultr both at `2173d6f`. Sessions 1–6 of `revamp/day5-ui` merged + pushed + smoke-verified on live).
+Last updated: 2026-05-17 night. Day-5 UI revamp **COMPLETE + DEPLOYED**. Public HTTPS URL **live at `https://diligence.duckdns.org`** (Let's Encrypt cert, auto-renew, free DuckDNS subdomain pointing at Vultr IPv4 + IPv6). `main` at `4677e18`, Vultr at `4677e18`. Sessions 1–6 of `revamp/day5-ui` merged + pushed + smoke-verified on live.
+
+## Public URLs
+
+- **Primary (HTTPS, recommended for submission)**: `https://diligence.duckdns.org`
+- Raw IPv4 (HTTP only, default-server catch): `http://80.240.26.175` — still works, kept in CORS allowlist.
+- DNS: DuckDNS account holds `diligence.duckdns.org` → A `80.240.26.175` + AAAA `2a05:f480:1800:200:5400:6ff:fe2a:8306`. Token only in Mirel's DuckDNS account; not stored anywhere in the repo.
+- TLS: Let's Encrypt cert at `/etc/letsencrypt/live/diligence.duckdns.org/`. Expires 2026-08-15. Certbot systemd timer handles renewal — no action needed.
+- nginx: `server_name diligence.duckdns.org;` with HTTP→HTTPS 301 redirect block auto-added by certbot. IP-based requests still served via `listen 80 default_server` catch-all.
+- CORS: `_DEFAULT_ALLOWED_ORIGINS` in `backend/api.py` includes `http(s)://diligence.duckdns.org` + the IP variants + localhost dev.
+
 
 ## Day-5 UI revamp — DONE
 
