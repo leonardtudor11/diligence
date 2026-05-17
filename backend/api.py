@@ -126,6 +126,41 @@ async def _emit(run_id: str, payload: dict) -> None:
         await q.put(msg)
 
 
+# How long to keep finished-run replay logs + metadata before pruning.
+# A single uvicorn worker process can stay up for days; without pruning
+# every POST accumulates kilobytes of events forever.
+RUN_RETENTION_S = 3600
+
+
+def _purge_old_runs() -> None:
+    """Drop run_id entries whose status is terminal and whose last event
+    fired more than RUN_RETENTION_S ago. Best-effort; called inline from
+    POST so we don't need a separate sweeper task."""
+    import time as _time
+    now = _time.monotonic()
+    to_drop: list[str] = []
+    for rid, meta in _RUN_META.items():
+        if meta.get("status") not in ("done", "error"):
+            continue
+        ts = meta.get("_finished_at")
+        if ts is None:
+            # First time we've seen this run as terminal — stamp it now
+            # so the next sweep can age it out.
+            meta["_finished_at"] = now
+            continue
+        if now - ts > RUN_RETENTION_S:
+            to_drop.append(rid)
+    for rid in to_drop:
+        _RUN_META.pop(rid, None)
+        _RUN_EVENTS_LOG.pop(rid, None)
+        _RUN_QUEUES.pop(rid, None)
+
+
+def _now_monotonic() -> float:
+    import time as _time
+    return _time.monotonic()
+
+
 def _client_ip(request: Request) -> str:
     """Resolve the client IP, honouring the trusted nginx X-Forwarded-For
     header. We assume a single trusted upstream so taking the first hop
@@ -282,6 +317,7 @@ async def start_research(
     """
     td = _ticker_dir(ticker)
     full_cache = (td / "reconciliation.json").exists() and not force
+    _purge_old_runs()
 
     if not full_cache:
         ip = _client_ip(request)
@@ -382,6 +418,7 @@ async def _run_full_pipeline_bg(
                     })
 
             meta["status"] = "done"
+            meta["_finished_at"] = _now_monotonic()
             await _emit(run_id, {"event": "done", "ticker": ticker})
     except Exception as exc:  # noqa: BLE001 — surface any failure to the client
         logger.exception(
@@ -389,6 +426,7 @@ async def _run_full_pipeline_bg(
         )
         meta["status"] = "error"
         meta["error"] = str(exc)
+        meta["_finished_at"] = _now_monotonic()
         await _emit(run_id, {"event": "error", "error": str(exc)})
     finally:
         # Sentinel — the SSE generator exits when it sees None.

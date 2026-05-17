@@ -159,11 +159,16 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
           </p>
         ) : ingestInfo ? (
           <div className="mt-5 space-y-1 rounded border border-border/40 bg-secondary/20 p-3 font-mono text-[11px] text-foreground/70">
-            <p>
+            <p className="flex items-center gap-2 truncate">
               <span className="text-foreground/40">Audio source:</span>{" "}
-              <span className="text-foreground">{audioUploader || "—"}</span>
+              <span
+                className="max-w-[14rem] truncate text-foreground"
+                title={audioUploader || ""}
+              >
+                {audioUploader || "—"}
+              </span>
               {audioTier ? (
-                <span className="ml-2 rounded bg-background/40 px-1.5 py-0.5 text-[9px] tracking-wider text-foreground/60">
+                <span className="ml-1 shrink-0 rounded bg-background/40 px-1.5 py-0.5 text-[9px] tracking-wider text-foreground/60">
                   {audioTier.split("_")[0]}
                 </span>
               ) : null}
