@@ -62,10 +62,10 @@ export default function Hero() {
       <TickerLauncher />
 
       <a
-        href="#how"
+        href="/methodology"
         className="hero-cta mt-4 box-border inline-flex h-10 items-center justify-center rounded-md border border-border/60 bg-secondary/30 px-5 font-mono text-xs uppercase tracking-[0.25em] text-foreground/70 transition-colors duration-200 hover:bg-secondary/60 hover:text-foreground"
       >
-        How it works ↓
+        How it works →
       </a>
 
       <div className="hero-strip mt-12 w-full max-w-6xl">

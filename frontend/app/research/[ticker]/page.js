@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { getResearch } from "../../../lib/api";
 import Dashboard from "./Dashboard";
+import NotIngestedYet from "./NotIngestedYet";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,11 @@ export default async function ResearchPage({ params }) {
     );
   }
 
-  if (!payload) notFound();
+  // null payload means GET 404'd — ticker has no cache. Render the
+  // run-pipeline CTA inline instead of dead-ending on notFound().
+  if (!payload) {
+    return <NotIngestedYet ticker={t} />;
+  }
 
   return <Dashboard ticker={t} payload={payload} />;
 }

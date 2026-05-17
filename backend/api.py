@@ -106,6 +106,16 @@ _RUN_EVENTS_LOG: dict[str, list[str]] = {}
 # on the same lock instead of both spawning ingest + agent runs in parallel.
 _TICKER_LOCKS: dict[str, asyncio.Lock] = collections.defaultdict(asyncio.Lock)
 
+# Rate-limit POST /api/research/{ticker} — per-IP deque of submission
+# timestamps; max RATE_LIMIT_BURST cold-ingest requests per
+# RATE_LIMIT_WINDOW_S window. Cached-ticker POSTs are exempt because they
+# don't trigger paid spend, only a fast cache-replay.
+RATE_LIMIT_WINDOW_S = 3600
+RATE_LIMIT_BURST = 3
+_POST_HISTORY: dict[str, "collections.deque[float]"] = collections.defaultdict(
+    collections.deque
+)
+
 
 async def _emit(run_id: str, payload: dict) -> None:
     """Append an event to the replay log and the live queue (if open)."""
@@ -114,6 +124,36 @@ async def _emit(run_id: str, payload: dict) -> None:
     q = _RUN_QUEUES.get(run_id)
     if q is not None:
         await q.put(msg)
+
+
+def _client_ip(request: Request) -> str:
+    """Resolve the client IP, honouring the trusted nginx X-Forwarded-For
+    header. We assume a single trusted upstream so taking the first hop
+    is safe; in a multi-hop setup this would need a configurable trust
+    list.
+    """
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    if request.client is not None:
+        return request.client.host
+    return "unknown"
+
+
+def _rate_limit_check(ip: str) -> tuple[bool, int]:
+    """Returns (allowed, retry_after_seconds). Stateful — call once per
+    POST that *would* trigger a cold ingest, and skip for cached hits."""
+    import time as _time
+    now = _time.monotonic()
+    dq = _POST_HISTORY[ip]
+    cutoff = now - RATE_LIMIT_WINDOW_S
+    while dq and dq[0] < cutoff:
+        dq.popleft()
+    if len(dq) >= RATE_LIMIT_BURST:
+        retry = max(1, int(dq[0] + RATE_LIMIT_WINDOW_S - now))
+        return False, retry
+    dq.append(now)
+    return True, 0
 
 
 def _ticker_dir(ticker: str) -> Path:
@@ -221,6 +261,7 @@ def get_research(ticker: str) -> JSONResponse:
 @app.post("/api/research/{ticker}")
 async def start_research(
     ticker: str,
+    request: Request,
     background_tasks: BackgroundTasks,
     reuse_cache: bool = False,
     force: bool = False,
@@ -234,8 +275,27 @@ async def start_research(
 
     A new ``run_id`` is always returned; the SSE stream replays past
     events for the same ``run_id`` so the frontend can reconnect mid-run.
+
+    Rate-limited: a single IP can submit at most ``RATE_LIMIT_BURST``
+    *cold* (paid) POSTs per ``RATE_LIMIT_WINDOW_S`` window. Cached
+    submissions are exempt because they only replay the existing cache.
     """
     td = _ticker_dir(ticker)
+    full_cache = (td / "reconciliation.json").exists() and not force
+
+    if not full_cache:
+        ip = _client_ip(request)
+        allowed, retry_after = _rate_limit_check(ip)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Rate limit: {RATE_LIMIT_BURST} cold-ingest runs per "
+                    f"hour per IP. Retry in ~{retry_after}s."
+                ),
+                headers={"Retry-After": str(retry_after)},
+            )
+
     run_id = uuid.uuid4().hex[:12]
     _RUN_QUEUES[run_id] = asyncio.Queue()
     _RUN_META[run_id] = {
@@ -248,7 +308,6 @@ async def start_research(
     # If the ticker is fully cached and the caller did not pass force=true,
     # default to reusing cached analyses so we don't re-spend Gemini /
     # Featherless on the agent graph.
-    full_cache = (td / "reconciliation.json").exists() and not force
     effective_reuse_cache = reuse_cache or full_cache
 
     background_tasks.add_task(
