@@ -45,6 +45,7 @@ Vultr box; nginx routes /api/ -> 127.0.0.1:8000.
 from __future__ import annotations
 
 import asyncio
+import collections
 import json
 import logging
 import os
@@ -98,6 +99,21 @@ app.add_middleware(
 _RUN_QUEUES: dict[str, asyncio.Queue] = {}
 # run_id -> {"ticker": str, "status": "running"|"done"|"error", "error": str|None}
 _RUN_META: dict[str, dict[str, Any]] = {}
+# run_id -> [json_str, ...]. Append-only log so an SSE reconnect can replay
+# every event that has already fired before tailing the live queue.
+_RUN_EVENTS_LOG: dict[str, list[str]] = {}
+# Per-ticker asyncio.Lock — two concurrent POSTs for the same ticker queue
+# on the same lock instead of both spawning ingest + agent runs in parallel.
+_TICKER_LOCKS: dict[str, asyncio.Lock] = collections.defaultdict(asyncio.Lock)
+
+
+async def _emit(run_id: str, payload: dict) -> None:
+    """Append an event to the replay log and the live queue (if open)."""
+    msg = json.dumps(payload)
+    _RUN_EVENTS_LOG.setdefault(run_id, []).append(msg)
+    q = _RUN_QUEUES.get(run_id)
+    if q is not None:
+        await q.put(msg)
 
 
 def _ticker_dir(ticker: str) -> Path:
@@ -207,72 +223,146 @@ async def start_research(
     ticker: str,
     background_tasks: BackgroundTasks,
     reuse_cache: bool = False,
-) -> dict[str, str]:
-    """Trigger a fresh graph run for a ticker."""
-    td = _ticker_dir(ticker)
-    if not td.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"{ticker.upper()} not ingested — run services.ingest first",
-        )
+    force: bool = False,
+) -> dict[str, Any]:
+    """Start (or surface) a research run for a ticker.
 
+    Cold ticker: runs the full pipeline — ``services.ingest.ingest`` in a
+    worker thread, then the agent graph. Cached ticker: ``ingest`` is
+    skipped (manifest already present) and ``reuse_cache`` is forced on
+    so the agent graph short-circuits at every cached analysis file.
+
+    A new ``run_id`` is always returned; the SSE stream replays past
+    events for the same ``run_id`` so the frontend can reconnect mid-run.
+    """
+    td = _ticker_dir(ticker)
     run_id = uuid.uuid4().hex[:12]
     _RUN_QUEUES[run_id] = asyncio.Queue()
-    _RUN_META[run_id] = {"ticker": ticker.upper(), "status": "running", "error": None}
+    _RUN_META[run_id] = {
+        "ticker": ticker.upper(),
+        "status": "running",
+        "error": None,
+    }
+    _RUN_EVENTS_LOG[run_id] = []
 
-    background_tasks.add_task(_run_graph_bg, run_id, ticker.upper(), reuse_cache)
-    return {"run_id": run_id, "ticker": ticker.upper()}
+    # If the ticker is fully cached and the caller did not pass force=true,
+    # default to reusing cached analyses so we don't re-spend Gemini /
+    # Featherless on the agent graph.
+    full_cache = (td / "reconciliation.json").exists() and not force
+    effective_reuse_cache = reuse_cache or full_cache
+
+    background_tasks.add_task(
+        _run_full_pipeline_bg,
+        run_id,
+        ticker.upper(),
+        effective_reuse_cache,
+        force,
+    )
+    return {
+        "run_id": run_id,
+        "ticker": ticker.upper(),
+        "cached": full_cache,
+    }
 
 
-async def _run_graph_bg(run_id: str, ticker: str, reuse_cache: bool) -> None:
-    """Background coroutine: execute the agent graph and stream node-complete
-    events into the SSE queue.
+async def _run_full_pipeline_bg(
+    run_id: str,
+    ticker: str,
+    reuse_cache: bool,
+    force: bool,
+) -> None:
+    """Background coroutine: optional ingest + agent graph, streamed via SSE.
+
+    The per-ticker ``asyncio.Lock`` serialises concurrent runs for the same
+    ticker so two judges hitting "Run NVDA" don't both pay for ingest /
+    agents. The second caller's queue still gets events emitted via the
+    replay log when the lock releases.
     """
-    q = _RUN_QUEUES[run_id]
     meta = _RUN_META[run_id]
+    lock = _TICKER_LOCKS[ticker]
     try:
-        # Lazy import — keeps `uvicorn backend.api:app --reload` fast and
-        # avoids pulling Vertex/Featherless deps into the import graph if
-        # the server is only serving cached data.
-        from agents.graph import build_graph
+        async with lock:
+            await _emit(run_id, {"event": "start", "ticker": ticker})
 
-        graph = build_graph()
-        initial = {
-            "ticker": ticker,
-            "data_dir": DATA_DIR,
-            "reuse_cache": reuse_cache,
-            "agents": {},
-        }
+            td = DATA_DIR / ticker
+            manifest_path = td / "manifest.json"
+            need_ingest = force or not manifest_path.exists()
+            if need_ingest:
+                await _emit(run_id, {"event": "ingest_start", "ticker": ticker})
+                # Lazy import — keeps server bootstrap free of yt-dlp /
+                # google-genai weight when serving cached data.
+                from services.ingest import ingest as run_ingest
+                manifest = await asyncio.to_thread(run_ingest, ticker, force=force)
+                sources = manifest.get("sources") or {}
+                audio_src = sources.get("audio") or {}
+                await _emit(run_id, {
+                    "event": "ingest_done",
+                    "files": manifest.get("files") or {},
+                    "warnings": manifest.get("warnings") or [],
+                    "audio_tier": audio_src.get("tier"),
+                    "audio_score": audio_src.get("score"),
+                    "audio_url": audio_src.get("url"),
+                    "audio_uploader": audio_src.get("uploader"),
+                })
+            else:
+                await _emit(run_id, {"event": "ingest_cached"})
 
-        await q.put(json.dumps({"event": "start", "ticker": ticker}))
+            from agents.graph import build_graph
+            graph = build_graph()
+            initial = {
+                "ticker": ticker,
+                "data_dir": DATA_DIR,
+                "reuse_cache": reuse_cache,
+                "agents": {},
+            }
+            async for step in graph.astream(initial):
+                for node_name, _delta in step.items():
+                    await _emit(run_id, {
+                        "event": "node_complete",
+                        "node": node_name,
+                    })
 
-        # `astream` yields one update per node completion. Each update is
-        # {node_name: state_delta}; we forward just the node name so the UI
-        # can light up a progress badge without leaking model output.
-        async for step in graph.astream(initial):
-            for node_name, _delta in step.items():
-                await q.put(json.dumps({"event": "node_complete", "node": node_name}))
-
-        meta["status"] = "done"
-        await q.put(json.dumps({"event": "done", "ticker": ticker}))
+            meta["status"] = "done"
+            await _emit(run_id, {"event": "done", "ticker": ticker})
     except Exception as exc:  # noqa: BLE001 — surface any failure to the client
-        logger.exception("graph run failed: ticker=%s run_id=%s", ticker, run_id)
+        logger.exception(
+            "pipeline failed: ticker=%s run_id=%s", ticker, run_id,
+        )
         meta["status"] = "error"
         meta["error"] = str(exc)
-        await q.put(json.dumps({"event": "error", "error": str(exc)}))
+        await _emit(run_id, {"event": "error", "error": str(exc)})
     finally:
         # Sentinel — the SSE generator exits when it sees None.
-        await q.put(None)
+        q = _RUN_QUEUES.get(run_id)
+        if q is not None:
+            await q.put(None)
 
 
 @app.get("/api/research/{ticker}/stream")
-async def stream_research(ticker: str, run_id: str, request: Request) -> StreamingResponse:
-    """SSE stream of node-complete events for an in-flight run."""
-    q = _RUN_QUEUES.get(run_id)
-    if q is None:
+async def stream_research(
+    ticker: str, run_id: str, request: Request,
+) -> StreamingResponse:
+    """SSE stream of pipeline + agent events.
+
+    Replays every event already in ``_RUN_EVENTS_LOG[run_id]`` before
+    tailing the live queue, so a reconnect (or a slow ProgressModal
+    mount) doesn't miss the start / ingest_done events.
+    """
+    if run_id not in _RUN_META:
         raise HTTPException(status_code=404, detail=f"unknown run_id {run_id}")
 
     async def gen():
+        # Replay first. This is non-blocking and bounded by the run's
+        # event count — typically <20 lines for a full pipeline.
+        for past in _RUN_EVENTS_LOG.get(run_id, []):
+            yield f"data: {past}\n\n"
+
+        # If the run terminated before this client connected, the queue
+        # is gone — the replay above is all there is.
+        q = _RUN_QUEUES.get(run_id)
+        if q is None:
+            return
+
         try:
             while True:
                 if await request.is_disconnected():
@@ -287,8 +377,9 @@ async def stream_research(ticker: str, run_id: str, request: Request) -> Streami
                     return
                 yield f"data: {item}\n\n"
         finally:
-            # Tidy up — keep the run's terminal status in _RUN_META so the
-            # client can still GET the final result; only the queue dies.
+            # Tidy up the queue once this client disconnects. Keep the
+            # terminal status in _RUN_META + the replay log so a
+            # subsequent reconnect can still see the run's history.
             _RUN_QUEUES.pop(run_id, None)
 
     return StreamingResponse(
@@ -299,6 +390,40 @@ async def stream_research(ticker: str, run_id: str, request: Request) -> Streami
             "X-Accel-Buffering": "no",  # nginx: disable response buffering
         },
     )
+
+
+@app.get("/api/tickers")
+def list_tickers() -> dict[str, Any]:
+    """List every ticker with a cached reconciliation.
+
+    Powers the TickerLauncher chip set on the landing page. Each entry
+    includes the manifest-derived company name, an ``audio_tier`` (T1/T2
+    /T3/T4 or null when audio is absent), and a ``has_audio`` flag.
+    """
+    out: list[dict[str, Any]] = []
+    if not DATA_DIR.exists():
+        return {"tickers": out}
+    for d in sorted(DATA_DIR.iterdir()):
+        if not d.is_dir():
+            continue
+        if not (d / "reconciliation.json").exists():
+            continue
+        entry: dict[str, Any] = {"ticker": d.name}
+        manifest_path = d / "manifest.json"
+        if manifest_path.exists():
+            try:
+                m = json.loads(manifest_path.read_text())
+            except json.JSONDecodeError as e:
+                logger.error("malformed manifest at %s: %s", manifest_path, e)
+                m = {}
+            entry["company"] = m.get("company")
+            files = m.get("files") or {}
+            entry["has_audio"] = bool(files.get("earnings_call_mp3"))
+            audio = (m.get("sources") or {}).get("audio") or {}
+            entry["audio_tier"] = audio.get("tier")
+            entry["audio_score"] = audio.get("score")
+        out.append(entry)
+    return {"tickers": out}
 
 
 @app.get("/api/research/{ticker}/audio")
