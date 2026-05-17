@@ -148,16 +148,15 @@ def ingest(
         try:
             tx = speech.transcribe(audio_path)
             _write_json(transcript_path, tx)
-            results = tx.get("results", [])
-            speakers = {
-                w["alternatives"][0].get("speaker", "UNK")
-                for w in results
-                if w.get("alternatives")
-            }
+            audit = tx.get("_diarization_audit") or {}
             log.info(
                 "Speechmatics: %d tokens, %d speaker(s): %s",
-                len(results), len(speakers), sorted(speakers),
+                len(tx.get("results", [])),
+                len(audit.get("distinct_speakers", [])),
+                audit.get("distinct_speakers", []),
             )
+            for w in audit.get("warnings", []):
+                warnings.append(f"Speechmatics: {w}")
         except TranscriptionFailed as e:
             log.error("Speechmatics: %s", e)
             warnings.append(f"Speechmatics: {e}")
