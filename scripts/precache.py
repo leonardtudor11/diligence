@@ -152,9 +152,12 @@ def preflight(ticker: str) -> dict:
     # ---- 3. FMP free-tier quota ping ----
     try:
         fund = fmp.fetch_fundamentals(ticker)
+        # /stable/profile returns a list of one company dict, not a dict.
+        profile_list = fund.get("profile") or []
+        profile = profile_list[0] if profile_list else {}
         result["checks"]["fmp"] = {
             "ok": True,
-            "profile_companyName": (fund.get("profile") or {}).get("companyName"),
+            "profile_companyName": profile.get("companyName"),
             "warnings": fund.get("_warnings", []),
         }
     except Exception as e:

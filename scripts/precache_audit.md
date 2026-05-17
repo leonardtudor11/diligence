@@ -42,3 +42,9 @@
 - **result.top_materiality**: 10
 - **result.integrity_warnings**: []
 - **result.confidence_downgrade**: "28 call claim(s) sourced from unverified_audio (yt-dlp). Treat call-only positions with caution."
+
+## TSLA — 2026-05-17T08:16:27+00:00
+- **preflight.edgar**: {"ok": true, "ticker": "TSLA", "cik": "0001318605", "name": "Tesla, Inc.", "has_10k": true, "has_10q": true, "10k_filed": "2026-01-29", "10q_filed": "2026-04-23"}
+- **preflight.youtube**: {"url": "https://www.youtube.com/watch?v=qO7T5zgRvXM", "uploader": "Tesla", "channel": "Tesla", "title": "Tesla Q1 2026 Financial Results and Q&A Webcast", "duration_seconds": 3920, "upload_date": "20260422", "trusted_uploader": false, "ok": true}
+- **preflight.fmp**: {"ok": true, "profile_companyName": "Tesla, Inc.", "warnings": []}
+- **status**: dry-run, preflight only
