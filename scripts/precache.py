@@ -18,8 +18,12 @@ Usage::
 Adversarial checks per ticker (before any paid call):
 
   1. EDGAR resolves the symbol → CIK with a recent 10-K **and** 10-Q.
-  2. yt-dlp probe returns a candidate ≥ 1200s with a plausible uploader
-     (warns on AI-summary channels, fake reposts, off-topic clips).
+  2. ``services.audio.find_best_audio_candidate`` scores up to 16 yt-dlp
+     candidates across two queries (ticker + issuer-name) on five
+     dimensions (duration, title positives, title negatives, uploader
+     tier, recency-vs-target-date) and returns a winner-or-None decision
+     with full per-candidate score breakdown. The pre-flight skips paid
+     spend on any ticker where no candidate clears the minimum score.
   3. FMP ``/stable/profile`` returns 200 (free-tier daily quota check).
 
 If any step fails, the ticker is skipped and the reason is logged.
@@ -49,22 +53,6 @@ from services import audio, edgar, fmp  # noqa: E402
 DATA = ROOT / "data"
 AUDIT_PATH = ROOT / "scripts" / "precache_audit.md"
 
-# Channels we expect to see for legit big-cap earnings calls. Anything
-# else is allowed but flagged so a human can eyeball the result.
-TRUSTED_UPLOADER_HINTS = (
-    "investor",
-    "earnings",
-    "official",
-    "corporation",
-    "corp",
-    "inc",
-    "ir ",
-    " ir",
-    "yahoo finance",  # routine repost of full call
-    "bloomberg",
-    "cnbc",
-)
-
 log = logging.getLogger("precache")
 
 
@@ -84,11 +72,6 @@ def _audit_header(ticker: str) -> None:
 
 def _audit_kv(key: str, value) -> None:
     _audit_append(f"- **{key}**: {value}")
-
-
-def _looks_trusted(uploader: str | None, channel: str | None) -> bool:
-    blob = " ".join(filter(None, [uploader, channel])).lower()
-    return any(hint in blob for hint in TRUSTED_UPLOADER_HINTS)
 
 
 def preflight(ticker: str) -> dict:
@@ -138,16 +121,50 @@ def preflight(ticker: str) -> dict:
         result["checks"]["edgar"] = {"ok": False, "error": str(e)}
         return result
 
-    # ---- 2. YouTube probe (no download, no Speechmatics) ----
-    yt = audio.probe_youtube_source(ticker)
-    if yt is None:
+    # ---- 2. YouTube selection (autonomous tiered scoring, no download) ----
+    target_date = (
+        result["checks"]["edgar"].get("10q_filed")
+        or result["checks"]["edgar"].get("10k_filed")
+    )
+    issuer = result["checks"]["edgar"].get("name")
+    sel = audio.find_best_audio_candidate(
+        ticker, issuer_name=issuer, target_date_iso=target_date,
+    )
+    yt_check: dict = {
+        "ok": sel["selected"] is not None,
+        "queries": sel["queries"],
+        "selected_score": sel["selected_score"],
+        "selected_tier": sel["selected_tier"],
+        "reason": sel["reason"],
+        "candidates_considered_count": len(sel["candidates_considered"]),
+        # Top 5 candidates (winners + losers) so the audit log shows why
+        # the picked video beat the rest, or why none cleared threshold.
+        "top_candidates": [
+            {
+                "score": s["total"],
+                "tier": s["tier"],
+                "uploader": s["candidate"].get("uploader"),
+                "title": s["candidate"].get("title"),
+                "duration_seconds": s["candidate"].get("duration_seconds"),
+                "upload_date": s["candidate"].get("upload_date"),
+            }
+            for s in sel["candidates_considered"][:5]
+        ],
+    }
+    if sel["selected"]:
+        s = sel["selected"]
+        yt_check.update({
+            "url": s.get("url"),
+            "uploader": s.get("uploader"),
+            "title": s.get("title"),
+            "duration_seconds": s.get("duration_seconds"),
+            "upload_date": s.get("upload_date"),
+        })
+    result["checks"]["youtube"] = yt_check
+    if not sel["selected"]:
         result["ok"] = False
-        result["skip_reason"] = "yt-dlp: no candidate ≥1200s for this ticker"
-        result["checks"]["youtube"] = {"ok": False}
+        result["skip_reason"] = sel["reason"]
         return result
-    yt["trusted_uploader"] = _looks_trusted(yt.get("uploader"), yt.get("channel"))
-    yt["ok"] = True
-    result["checks"]["youtube"] = yt
 
     # ---- 3. FMP free-tier quota ping ----
     try:
@@ -229,9 +246,10 @@ def main() -> int:
             continue
 
         yt = pf["checks"]["youtube"]
-        log.info("  yt-dlp candidate: %s | %s (%ss) — trusted=%s",
+        log.info("  yt-dlp candidate: %s | %s (%ss) — tier=%s, score=%s",
                  yt.get("title"), yt.get("uploader"),
-                 yt.get("duration_seconds"), yt.get("trusted_uploader"))
+                 yt.get("duration_seconds"),
+                 yt.get("selected_tier"), yt.get("selected_score"))
         log.info("  EDGAR: %s (CIK %s) 10-K %s · 10-Q %s",
                  pf["checks"]["edgar"]["ticker"],
                  pf["checks"]["edgar"]["cik"],

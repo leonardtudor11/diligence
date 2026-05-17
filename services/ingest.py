@@ -108,38 +108,76 @@ def ingest(
             warnings.append(f"FMP: {e}")
 
     # ---- 3. Audio acquisition ----
+    # Autonomous selector: probe N candidates across two queries
+    # (ticker-based + issuer-name-based), score each on duration / title /
+    # uploader-tier / recency, pick the highest above MIN_CANDIDATE_SCORE.
+    # If nothing clears the threshold, manifest.warnings explains why and
+    # the agent graph runs on EDGAR + FMP only.
     audio_path: Path | None = None
     audio_provenance: dict | None = None
+    audio_selection: dict | None = None
     if skip_audio:
         log.info("Audio: skipped (--skip-audio)")
     else:
-        try:
-            log.info("Audio: probing YouTube for %s", ticker)
-            audio_provenance = audio.probe_youtube_source(
-                ticker, quarter=quarter, year=year
-            )
-            if audio_provenance:
-                log.info(
-                    "Audio: candidate '%s' by %s (%ds) — %s",
-                    audio_provenance.get("title"),
-                    audio_provenance.get("uploader"),
-                    audio_provenance.get("duration_seconds") or 0,
-                    audio_provenance.get("url"),
-                )
+        target_date = (
+            filings.get("10-Q", {}).get("filed")
+            or filings.get("10-K", {}).get("filed")
+        )
+        log.info(
+            "Audio: searching candidates for %s (issuer=%r, target_date=%s)",
+            ticker, filings.get("name"), target_date,
+        )
+        audio_selection = audio.find_best_audio_candidate(
+            ticker,
+            issuer_name=filings.get("name"),
+            target_date_iso=target_date,
+            quarter=quarter,
+            year=year,
+        )
+        log.info("Audio: %s", audio_selection["reason"])
 
-            log.info("Audio: downloading MP3")
-            audio_path = audio.fetch_earnings_audio(
-                ticker, quarter=quarter, year=year
-            )
-            size_mb = audio_path.stat().st_size / 1_048_576
-            log.info("Audio: %s (%.1f MB)", audio_path.name, size_mb)
-        except AudioNotAvailable as e:
-            log.error("Audio: %s", e)
-            warnings.append(f"Audio: {e}")
-            # Clear the probe metadata too — the candidate URL/uploader
-            # describe a video we ultimately failed to fetch, and writing
-            # it into manifest.sources.audio would mislead the dashboard.
-            audio_provenance = None
+        selected = audio_selection["selected"]
+        if selected is None:
+            warnings.append(f"Audio: {audio_selection['reason']}")
+        else:
+            try:
+                log.info(
+                    "Audio: downloading %s by %r (tier=%s, score=%s)",
+                    selected.get("url"),
+                    selected.get("uploader"),
+                    audio_selection["selected_tier"],
+                    audio_selection["selected_score"],
+                )
+                audio_path = audio.download_audio_by_url(
+                    selected["url"], DATA / ticker / "earnings_call.mp3",
+                )
+                size_mb = audio_path.stat().st_size / 1_048_576
+                log.info("Audio: %s (%.1f MB)", audio_path.name, size_mb)
+                # Build manifest provenance with full selection audit.
+                audio_provenance = dict(selected)
+                audio_provenance["tier"] = audio_selection["selected_tier"]
+                audio_provenance["score"] = audio_selection["selected_score"]
+                audio_provenance["score_breakdown"] = [
+                    {"factor": label, "delta": delta}
+                    for label, delta in audio_selection["selected_breakdown"]
+                ]
+                audio_provenance["candidates_considered"] = [
+                    {
+                        "url": s["candidate"].get("url"),
+                        "uploader": s["candidate"].get("uploader"),
+                        "title": s["candidate"].get("title"),
+                        "duration_seconds": s["candidate"].get("duration_seconds"),
+                        "upload_date": s["candidate"].get("upload_date"),
+                        "score": s["total"],
+                        "tier": s["tier"],
+                    }
+                    for s in audio_selection["candidates_considered"][:8]
+                ]
+                audio_provenance["queries"] = audio_selection["queries"]
+            except AudioNotAvailable as e:
+                log.error("Audio: %s", e)
+                warnings.append(f"Audio: {e}")
+                audio_provenance = None
 
     # ---- 4. Speechmatics transcription ----
     transcript_path = out_dir / "transcript.json"
