@@ -89,6 +89,8 @@ app = FastAPI(title="Diligence API", version="0.1.0")
 _DEFAULT_ALLOWED_ORIGINS = [
     "http://80.240.26.175",
     "https://80.240.26.175",
+    "http://diligence.duckdns.org",
+    "https://diligence.duckdns.org",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
