@@ -108,3 +108,16 @@
 - **preflight.youtube**: {"ok": true, "queries": ["AMD earnings call", "ADVANCED MICRO DEVICES earnings call"], "selected_score": 65, "selected_tier": "T4_unverified", "reason": "Picked '$AMD Advanced Micro Devices Q1 2026 Earnings Conference Call' by 'EARNMOAR' (tier=T4_unverified, score=65; 9 other candidate(s) considered).", "candidates_considered_count": 10, "url": "https://www.youtube.com/watch?v=zV00rljp-8A", "uploader": "EARNMOAR", "title": "$AMD Advanced Micro Devices Q1 2026 Earnings Conference Call", "duration_seconds": 3792, "upload_date": "20260506"}
 - **preflight.fmp**: {"ok": true, "profile_companyName": "Advanced Micro Devices, Inc.", "warnings": []}
 - **status**: dry-run, preflight only
+
+## PLTR — 2026-05-17T08:50:37+00:00
+- **preflight.edgar**: {"ok": true, "ticker": "PLTR", "cik": "0001321655", "name": "Palantir Technologies Inc.", "has_10k": true, "has_10q": true, "10k_filed": "2026-02-17", "10q_filed": "2026-05-05"}
+- **preflight.youtube**: {"ok": true, "queries": ["PLTR earnings call", "Palantir Technologies earnings call"], "selected_score": 125, "selected_tier": "T1_verified_primary", "reason": "Picked 'Palantir Technologies | Q1 2026 Earnings Webcast' by 'Palantir' (tier=T1_verified_primary, score=125; 12 other candidate(s) considered).", "candidates_considered_count": 13, "top_candidates": [{"score": 125, "tier": "T1_verified_primary", "uploader": "Palantir", "title": "Palantir Technologies | Q1 2026 Earnings Webcast", "duration_seconds": 2577, "upload_date": "20260505"}, {"score": 110, "tier": "T1_verified_primary", "uploader": "Palantir", "title": "Palantir Technologies | Q4 2025 Earnings Webcast", "duration_seconds": 2955, "upload_date": "20260202"}, {"score": 100, "tier": "T1_verified_primary", "uploader": "Palantir", "title": "Palantir Technologies | Q3 2025 Earnings Webcast", "duration_seconds": 2790, "upload_date": "20251103"}, {"score": 100, "tier": "T1_verified_primary", "uploader": "Palantir", "title": "Palantir Technologies | Q2 2025 Earnings Webcast", "duration_seconds": 2560, "upload_date": "20250804"}, {"score": 65, "tier": "T4_unverified", "uploader": "EARNMOAR", "title": "$PLTR Palantir Q1 2026 Earnings Conference Call", "duration_seconds": 2554, "upload_date": "20260505"}], "url": "https://www.youtube.com/watch?v=1Aghjshi3U8", "uploader": "Palantir", "title": "Palantir Technologies | Q1 2026 Earnings Webcast", "duration_seconds": 2577, "upload_date": "20260505"}
+- **preflight.fmp**: {"ok": true, "profile_companyName": "Palantir Technologies Inc.", "warnings": []}
+- **result.manifest_warnings**: []
+- **result.wall_ingest_s**: 198.4
+- **result.wall_agents_s**: 190.8
+- **result.wall_total_s**: 389.2
+- **result.disputed_count**: 3
+- **result.top_materiality**: 10
+- **result.integrity_warnings**: ["Bull pillar 5 reasoning states U.S. revenue increased by 70%, but the cited claim C-013 states it grew 104%.", "Bear pillar 4, which discusses executive stock sales, incorrectly cites C-030 ('Palantir has 70 salespeople...'). The reasoning only pertains to claim F-019 regarding 10b5-1 plans."]
+- **result.confidence_downgrade**: "31 call claim(s) sourced from unverified_audio (yt-dlp). Treat call-only positions with caution."
