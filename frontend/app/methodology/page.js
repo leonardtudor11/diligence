@@ -66,10 +66,10 @@ const AGENTS = [
 ];
 
 const TIERS = [
-  { tier: "T1", label: "Verified primary", detail: "Uploader/channel matches the issuer name (token-level). Confidence: high." },
-  { tier: "T2", label: "Trusted aggregator", detail: "Bloomberg, Reuters, WSJ, Morningstar, S&P Global. Confidence: high but provenance one degree removed." },
-  { tier: "T3", label: "Editorial aggregator", detail: "Yahoo Finance, CNBC, Benzinga, Seeking Alpha, MarketWatch. Confidence: medium — may include host commentary. Dashboard renders the call audio with a confidence-downgrade banner." },
-  { tier: "T4", label: "Unverified", detail: "Channel can't be matched to the issuer or to any trusted aggregator allowlist. Confidence: low. Dashboard surfaces a confidence-downgrade banner explicitly stating the call claims are sourced from unverified audio." },
+  { tier: "T1", label: "Issuer-named", detail: "Uploader/channel name contains a salient token from the issuer's legal name or the ticker symbol. Indicative, not cryptographically verified — the system does not check YouTube's verified-channel checkmark or any identity proof. Strongest available signal in this rubric." },
+  { tier: "T2", label: "Trusted aggregator", detail: "Bloomberg, Reuters, WSJ, Morningstar, S&P Global. Provenance is one degree removed but the publisher class is audit-grade." },
+  { tier: "T3", label: "Editorial aggregator", detail: "Yahoo Finance, CNBC, Benzinga, Seeking Alpha, MarketWatch. May include host commentary mixed with raw call audio. Dashboard renders the call audio with a confidence-downgrade banner." },
+  { tier: "T4", label: "Unverified", detail: "Channel can't be matched to the issuer or to any trusted-aggregator allowlist. Dashboard surfaces a confidence-downgrade banner explicitly stating the call claims are sourced from unverified audio." },
 ];
 
 function Section({ title, eyebrow, children }) {

@@ -23,12 +23,33 @@ function speakerColor(label) {
 }
 
 // Tier label → short badge text + accent class for the provenance header.
+//
+// T1 was previously labelled "Verified primary", which overstated what
+// the system actually checks: a token-overlap between the YouTube
+// uploader name and the issuer name. The system does NOT confirm
+// YouTube's verified-channel checkmark or any cryptographic identity.
+// Renamed to "Issuer-named" to avoid implying verification we cannot
+// back up.
+//
+// T4 was previously rendered in a MUTED foreground/15 color, which
+// inverted the warning semantics — the LEAST trustworthy tier looked
+// the calmest on the dashboard. Now uses the destructive accent so the
+// user sees the warning at a glance.
 const TIER_BADGE = {
-  T1_verified_primary:    { short: "T1", text: "Verified primary",     accent: "bg-accent/20 text-accent border-accent/40" },
+  T1_verified_primary:    { short: "T1", text: "Issuer-named",         accent: "bg-accent/20 text-accent border-accent/40" },
   T2_trusted_aggregator:  { short: "T2", text: "Trusted aggregator",   accent: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
   T3_editorial_aggregator:{ short: "T3", text: "Editorial aggregator", accent: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40" },
-  T4_unverified:          { short: "T4", text: "Unverified",            accent: "bg-foreground/15 text-foreground/70 border-border/60" },
+  T4_unverified:          { short: "T4", text: "Unverified",            accent: "bg-destructive/20 text-destructive border-destructive/50" },
 };
+
+// Reject URLs that are not http(s) — defence-in-depth against a poisoned
+// yt-dlp result containing `javascript:` or `data:` schemes that React
+// would otherwise pass through into `<a href>`.
+function safeHref(url) {
+  if (typeof url !== "string") return null;
+  if (!/^https?:\/\//i.test(url)) return null;
+  return url;
+}
 
 export default function TranscriptPlayer({ ticker, words, audioSource }) {
   const containerRef = useRef(null);
@@ -111,18 +132,21 @@ export default function TranscriptPlayer({ ticker, words, audioSource }) {
         <div className="rounded-md border border-border/40 bg-background/30 px-4 py-3 text-xs font-mono">
           <div className="flex flex-wrap items-center gap-2 text-foreground/70">
             <span className="uppercase tracking-[0.25em] text-foreground/40">Source</span>
-            {audioSource.url ? (
-              <a
-                href={audioSource.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-foreground hover:text-accent"
-              >
-                {audioSource.uploader || audioSource.url}
-              </a>
-            ) : (
-              <span className="font-semibold text-foreground">{audioSource.uploader}</span>
-            )}
+            {(() => {
+              const href = safeHref(audioSource.url);
+              return href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-foreground hover:text-accent"
+                >
+                  {audioSource.uploader || href}
+                </a>
+              ) : (
+                <span className="font-semibold text-foreground">{audioSource.uploader}</span>
+              );
+            })()}
             {badge ? (
               <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${badge.accent}`}>
                 {badge.short} · {badge.text}

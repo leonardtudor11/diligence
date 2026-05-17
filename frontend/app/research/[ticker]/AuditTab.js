@@ -1,5 +1,21 @@
 "use client";
 
+// Reject any non-http(s) URL before rendering as an <a href>. A
+// poisoned candidate URL with a `javascript:` scheme is otherwise an
+// active XSS sink, target="_blank" notwithstanding.
+function safeHref(url) {
+  if (typeof url !== "string") return null;
+  if (!/^https?:\/\//i.test(url)) return null;
+  return url;
+}
+
+// Format yt-dlp's YYYYMMDD upload_date as YYYY-MM-DD for visual
+// consistency with the rest of the dashboard (SEC filing dates).
+function fmtUploadDate(d) {
+  if (typeof d !== "string" || d.length !== 8) return d || "—";
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+}
+
 export default function AuditTab({
   warnings,
   shared,
@@ -39,11 +55,12 @@ export default function AuditTab({
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <Block title="SEC filings (primary source)" empty="No filing provenance in manifest.">
-          {filingSources && Object.entries(filingSources).map(([form, src]) =>
-            src?.url ? (
+          {filingSources && Object.entries(filingSources).map(([form, src]) => {
+            const href = safeHref(src?.url);
+            return href ? (
               <li key={form} className="text-foreground/80">
                 <a
-                  href={src.url}
+                  href={href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent hover:underline"
@@ -54,8 +71,8 @@ export default function AuditTab({
                   <span className="ml-2 text-foreground/40">{src.accession}</span>
                 ) : null}
               </li>
-            ) : null
-          )}
+            ) : null;
+          })}
         </Block>
 
         <Block title="Pipeline warnings" empty="Pipeline ran clean — no manifest warnings.">
@@ -104,21 +121,24 @@ export default function AuditTab({
                     </td>
                     <td className="px-2 py-1">{c.uploader || "—"}</td>
                     <td className="px-2 py-1 truncate max-w-[24rem]" title={c.title}>
-                      {c.url ? (
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-accent"
-                        >
-                          {c.title || c.url}
-                        </a>
-                      ) : (
-                        c.title || "—"
-                      )}
+                      {(() => {
+                        const href = safeHref(c.url);
+                        return href ? (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-accent"
+                          >
+                            {c.title || href}
+                          </a>
+                        ) : (
+                          c.title || "—"
+                        );
+                      })()}
                     </td>
                     <td className="px-2 py-1 text-foreground/55">
-                      {c.upload_date || "—"}
+                      {fmtUploadDate(c.upload_date)}
                     </td>
                   </tr>
                 );

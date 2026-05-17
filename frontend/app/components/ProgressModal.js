@@ -4,17 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { streamUrl } from "../../lib/api";
 
-// Ordered stepper labels. Each entry maps one or more SSE event names
-// to the human label shown in the modal. Cached runs short-circuit the
-// ingest substeps via the single `ingest_cached` event.
+// Ordered stepper labels. The pipeline runs filing+call in parallel
+// then bull+bear in parallel — we render those as single combined
+// steps so the UI doesn't imply a sequential order that doesn't exist
+// in the graph. A combined step is "complete" only when BOTH its
+// parallel children have emitted node_complete.
 const STEPS = [
-  { id: "start", label: "Connecting to pipeline" },
-  { id: "ingest", label: "Fetching filings + audio" },
-  { id: "filing", label: "Filing analyst (Gemini)" },
-  { id: "call", label: "Call analyst (Gemini)" },
-  { id: "bull", label: "Bull / Bear (Qwen3)" },
+  { id: "start",      label: "Connecting to pipeline" },
+  { id: "ingest",     label: "Fetching filings + audio" },
+  { id: "extract",    label: "Filing + Call analysts (Gemini, parallel)", requires: ["filing", "call"] },
+  { id: "debate",     label: "Bull + Bear analysts (Qwen3, parallel)",    requires: ["bull", "bear"] },
   { id: "reconciler", label: "Reconciling disputed facts" },
-  { id: "done", label: "Ready" },
+  { id: "done",       label: "Ready" },
 ];
 
 function classifyEvent(evt) {
@@ -22,9 +23,8 @@ function classifyEvent(evt) {
   if (evt.event === "start") return "start";
   if (evt.event === "ingest_start" || evt.event === "ingest_done" || evt.event === "ingest_cached") return "ingest";
   if (evt.event === "node_complete") {
-    if (evt.node === "filing") return "filing";
-    if (evt.node === "call") return "call";
-    if (evt.node === "bull" || evt.node === "bear") return "bull";
+    if (evt.node === "filing" || evt.node === "call") return `_node:${evt.node}`;
+    if (evt.node === "bull"   || evt.node === "bear") return `_node:${evt.node}`;
     if (evt.node === "reconciler") return "reconciler";
   }
   if (evt.event === "done") return "done";
@@ -38,6 +38,11 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
   const [done, setDone] = useState(false);
   const esRef = useRef(null);
   const redirectedRef = useRef(false);
+
+  const doneRef = useRef(false);
+  useEffect(() => {
+    doneRef.current = done;
+  }, [done]);
 
   useEffect(() => {
     const url = streamUrl(ticker, runId);
@@ -59,9 +64,12 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
       }
     };
     es.onerror = () => {
-      // EventSource will auto-reconnect on transient drops. We only flag
-      // a hard error if the stream is closed (readyState 2 = CLOSED).
-      if (es.readyState === 2 && !done) {
+      // EventSource auto-reconnects on transient drops. Only flag a
+      // hard error if the stream is permanently closed AND the pipeline
+      // hadn't already emitted `done` (reading via doneRef so this
+      // effect doesn't re-run when `done` flips and reopens a second
+      // stale EventSource).
+      if (es.readyState === 2 && !doneRef.current) {
         setError("Stream closed unexpectedly. Try again.");
       }
     };
@@ -70,7 +78,7 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
       es.close();
       esRef.current = null;
     };
-  }, [ticker, runId, done]);
+  }, [ticker, runId]);
 
   // Redirect to the dashboard once the reconciler emits done. Small
   // delay so the user sees the green "Ready" state instead of a flash.
@@ -83,14 +91,41 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
     return () => clearTimeout(t);
   }, [done, router, ticker]);
 
+  // Track which underlying nodes/events have completed; a parallel-
+  // group step is "complete" only when every `requires` member has
+  // landed. Avoids the previous behaviour where Bull's node_complete
+  // alone marked the entire Bull+Bear step done.
   const completedSteps = useMemo(() => {
-    const hit = new Set();
+    const nodes = new Set();
+    const direct = new Set();
     for (const e of events) {
       const c = classifyEvent(e);
-      if (c) hit.add(c);
+      if (!c) continue;
+      if (c.startsWith("_node:")) {
+        nodes.add(c.slice("_node:".length));
+      } else {
+        direct.add(c);
+      }
+    }
+    const hit = new Set(direct);
+    for (const step of STEPS) {
+      if (step.requires) {
+        if (step.requires.every((n) => nodes.has(n))) hit.add(step.id);
+      }
     }
     return hit;
   }, [events]);
+
+  // First not-yet-done step in defined order; everything past it is
+  // future, everything before it is past. Replaces the buggy "any
+  // non-start step with events.length > 0 is current" heuristic which
+  // marked all future steps as active simultaneously.
+  const currentStepId = useMemo(() => {
+    for (const s of STEPS) {
+      if (!completedSteps.has(s.id)) return s.id;
+    }
+    return null;
+  }, [completedSteps]);
 
   const ingestInfo = events.find((e) => e.event === "ingest_done");
   const ingestCached = events.some((e) => e.event === "ingest_cached");
@@ -118,10 +153,7 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
         <ol className="mt-5 space-y-2.5">
           {STEPS.map((s) => {
             const isDone = completedSteps.has(s.id);
-            const isCurrent = !isDone && (
-              (s.id === "start" && events.length === 0) ||
-              (s.id !== "start" && completedSteps.size > 0 && !isDone)
-            );
+            const isCurrent = s.id === currentStepId;
             return (
               <li
                 key={s.id}
