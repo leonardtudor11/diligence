@@ -2,6 +2,11 @@
 
 import CitedText from "./CitedText";
 
+// ClaimChip is reused by DisputedFactCard to surface bull/bear citations
+// in the same visual language as the pillars. Exporting from here keeps
+// a single source of truth for the chip's actionability rules + styling.
+export { ClaimChip };
+
 export default function PillarColumn({
   tone,
   thesis,
@@ -40,7 +45,14 @@ export default function PillarColumn({
               {i + 1}. {p.headline}
             </p>
             <p className="mt-2 font-mono text-[13px] leading-relaxed text-foreground/75">
-              <CitedText text={p.reasoning} claimIndex={claimIndex} tone={tone} />
+              <CitedText
+                text={p.reasoning}
+                claimIndex={claimIndex}
+                tone={tone}
+                onClaimAction={onClaimAction}
+                filingSources={filingSources}
+                hasAudio={hasAudio}
+              />
             </p>
             {p.cited_claim_ids?.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">

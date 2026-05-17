@@ -199,7 +199,13 @@ export default function Dashboard({ ticker, payload }) {
 
         <div>
           {activeFact ? (
-            <DisputedFactCard fact={activeFact} claimIndex={claimIndex} />
+            <DisputedFactCard
+              fact={activeFact}
+              claimIndex={claimIndex}
+              onClaimAction={handleClaimAction}
+              filingSources={filingSources}
+              hasAudio={has_audio}
+            />
           ) : (
             <div className="rounded-lg border border-border/40 bg-secondary/20 p-5">
               <p className="font-mono text-sm text-foreground/60">

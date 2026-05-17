@@ -1,8 +1,15 @@
 "use client";
 
 import CitedText from "./CitedText";
+import { ClaimChip } from "./PillarColumn";
 
-export default function DisputedFactCard({ fact, claimIndex }) {
+export default function DisputedFactCard({
+  fact,
+  claimIndex,
+  onClaimAction,
+  filingSources,
+  hasAudio,
+}) {
   const score = fact.materiality_score;
   const scoreColor =
     score >= 8 ? "text-destructive" : score >= 5 ? "text-yellow-300" : "text-foreground/70";
@@ -43,6 +50,9 @@ export default function DisputedFactCard({ fact, claimIndex }) {
           text={fact.bull_position}
           ids={fact.bull_claim_ids}
           claimIndex={claimIndex}
+          onClaimAction={onClaimAction}
+          filingSources={filingSources}
+          hasAudio={hasAudio}
         />
         <Side
           label="Bear"
@@ -50,13 +60,25 @@ export default function DisputedFactCard({ fact, claimIndex }) {
           text={fact.bear_position}
           ids={fact.bear_claim_ids}
           claimIndex={claimIndex}
+          onClaimAction={onClaimAction}
+          filingSources={filingSources}
+          hasAudio={hasAudio}
         />
       </div>
     </div>
   );
 }
 
-function Side({ label, tone, text, ids, claimIndex }) {
+function Side({
+  label,
+  tone,
+  text,
+  ids,
+  claimIndex,
+  onClaimAction,
+  filingSources,
+  hasAudio,
+}) {
   const isBull = tone === "bull";
   const border = isBull ? "border-accent/40" : "border-destructive/40";
   const chip = isBull ? "bg-accent/15 text-accent" : "bg-destructive/15 text-destructive";
@@ -71,8 +93,30 @@ function Side({ label, tone, text, ids, claimIndex }) {
         </span>
       </div>
       <p className="font-mono text-[13px] leading-relaxed text-foreground/85">
-        <CitedText text={text} claimIndex={claimIndex} tone={tone} />
+        <CitedText
+          text={text}
+          claimIndex={claimIndex}
+          tone={tone}
+          onClaimAction={onClaimAction}
+          filingSources={filingSources}
+          hasAudio={hasAudio}
+        />
       </p>
+      {ids?.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {ids.map((id) => (
+            <ClaimChip
+              key={id}
+              id={id}
+              claim={claimIndex[id]}
+              tone={tone}
+              onAction={onClaimAction}
+              filingSources={filingSources}
+              hasAudio={hasAudio}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
