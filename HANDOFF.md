@@ -1,6 +1,193 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 (Day 3 complete + Day-3.5 in flight — backend, dashboard, deploy live; precache mid-flight).
+Last updated: 2026-05-17 (Day 4 complete — autonomous tiered selector + ingest-aware POST + full adversarial pass + 13 fixes shipped; Vultr live; only Phase 9 demo video left + a few elective items).
+
+## Day-4 progress — DONE (commits `7d16267` → `fd0c6da`, 13 commits on `main`, all pushed)
+
+Phase-by-phase status. Every phase committed + pushed to `origin/main`.
+
+| # | Phase | Commit(s) | State |
+|---|-------|-----------|-------|
+| 1 | Finish precache | `7d16267` (FMP fix), `bf57dee` (diarization audit), `9d72190` (selector), `fd0c6da` (backfill) | ✅ TSLA + PLTR cached; PLTR scored T1 125; NVDA stays T4 EARNMOAR — fine |
+| 2 | Ingest-aware POST + SSE replay + `/api/tickers` | `67a1a4f` | ✅ live |
+| 3 | Frontend TickerLauncher + ProgressModal | `40b1034` | ✅ live |
+| 4 | /methodology page | `8dc926e` | ✅ live |
+| 5 | NotIngestedYet (404 → run pipeline CTA) | `8dc926e` | ✅ live |
+| 6 | Provenance surfacing (TranscriptPlayer + AuditTab + Dashboard) | `781414e` | ✅ live |
+| 7 | Rate limit (backend + nginx snippet) | `8dc926e` | ✅ backend live; nginx limit_req_zone NOT yet pasted into `/etc/nginx/sites-enabled/diligence` (elective) |
+| 8 | E2E + adversarial review + fixes | `f7bab7f`, `e698ed0`, `dd46702` | ✅ 3 sub-agents ran in parallel (security + correctness + architecture) — 154 findings, top critical/high all fixed, tech-debt items punted (see "Day-4 tech-debt punted" below) |
+| 9 | Demo video | — | ⏳ pending — your task |
+
+### Day-4 key engineering decisions (single-source-of-truth for next session)
+
+**Autonomous tiered audio selector** — `services/audio.py:find_best_audio_candidate`. Probes ≤16 yt-dlp candidates across two queries (ticker + issuer-name), scores on duration / title-positive / title-negative / uploader-tier / recency-vs-target-date. Winner-or-None decision with full per-candidate audit. Below `MIN_CANDIDATE_SCORE=50` nothing downloads; manifest warns and the pipeline runs filing-only. Tier ladder: `T1_verified_primary` (issuer-name token-match), `T2_trusted_aggregator` (Bloomberg/Reuters/WSJ/Morningstar/S&P), `T3_editorial_aggregator` (Yahoo/CNBC/Benzinga/Seeking Alpha/MarketWatch), `T4_unverified`. The "verified" label is renamed to "Issuer-named" in the UI — we cannot cryptographically verify, only token-match.
+
+**Diarization audit** — `services/speech.py:audit_speaker_coverage`. Hard-fails (raises `TranscriptionFailed`) on <20% word-level speaker coverage or 0 distinct speakers. Soft-warns (`manifest.warnings`) on <80% coverage or single-speaker. Live PLTR run: 100% coverage, 8 speakers, 0 warnings.
+
+**Ingest-aware POST** — `backend/api.py:_run_full_pipeline_bg`. Cold ticker → `services.ingest.ingest` in `asyncio.to_thread` then agent graph. Cached ticker → skip ingest + force `reuse_cache=True` so no Gemini/Featherless re-spend. Per-ticker `asyncio.Lock` serialises concurrent runs for the same ticker. `_RUN_EVENTS_LOG` keyed by run_id holds every emitted event (with monotonic seq) so SSE reconnects replay history without duplicating live tail. Rate limit: 3 cold ingests/hr/IP, **peek** in POST handler then **consume** inside the lock after `need_ingest` is confirmed.
+
+**Frontend launcher** — `frontend/app/components/TickerLauncher.js` (chips from `GET /api/tickers` + form with `^[A-Za-z0-9]{1,6}$` regex). `ProgressModal.js` binds `EventSource(/api/research/T/stream?run_id=…)`, renders 6-step stepper (start → ingest → extract → debate → reconciler → done). Parallel groups: filing+call collapse to `extract`, bull+bear to `debate`. On `done` event → `router.push('/research/T')`.
+
+**Dashboard provenance** — `TranscriptPlayer` header now shows audio uploader (linked to YouTube via scheme-validated href), tier badge, score, "N candidates considered" count. `AuditTab` has new blocks: SEC filings (linked to sec.gov), pipeline warnings, audio candidates-considered table (top 8, winner highlighted, sortable by score). T1 badge is accent-green, T2 sky-blue, T3 yellow, T4 destructive-red — colours now match warning semantics (was inverted pre-fix).
+
+**Phase 8 adversarial pass** — 3 parallel Claude sub-agents on commits `7d16267..f7bab7f`:
+- **Security** (87 findings) — 4 CRITICAL, 7 HIGH, ~76 MEDIUM→LOW.
+- **Correctness** (47 findings) — S1 (data-corruption), S2 (visible regression), S3 (papercut).
+- **Architecture** (20 findings) — labelling integrity, structural smells, scope discipline.
+
+Fixed in commits `e698ed0` (backend security) + `dd46702` (frontend honesty):
+- CORS `*` → explicit allowlist (`http://80.240.26.175` + localhost dev). Was CSRF / spend-abuse vector.
+- X-Forwarded-For: read LAST hop (nginx-appended) or `X-Real-IP`, not first. Was rate-limit bypass via header spoof.
+- Rate-limit peek/consume split. Was double-debiting concurrent same-ticker POSTs.
+- SSE seq dedupe. Was double-yielding events present in queue at SSE-connect time.
+- `/stream` validates ticker + asserts `_RUN_META[run_id]["ticker"] == ticker.upper()`. Was ignoring the path param.
+- Atomic manifest write via `.tmp` + `os.replace`. SIGTERM mid-write would otherwise corrupt cache.
+- `yt-dlp --print %(field)j` → `--dump-json`. `%(field)j` is shell-escape, not JSON; uploaders/titles with apostrophes were silently dropped.
+- yt-dlp `subprocess.run(..., timeout=120s probe / 600s download)`. Was unbounded — thread-pool exhaustion on a hung response.
+- `download_audio_by_url` enforces `ALLOWED_AUDIO_HOSTS` + https-only. SSRF defence (cloud-metadata IPs etc.).
+- FMP `r.status_code >= 400` early-raise sanitised. `r.raise_for_status()` was serialising the request URL (including `?apikey=…`) into systemd journal via `logger.exception`.
+- Tier label `Verified primary` → `Issuer-named`. We don't actually verify YouTube checkmarks.
+- T4 badge: muted-gray → destructive-red. Inverted warning semantics fixed.
+- Frontend `safeHref()` rejects non-http(s) schemes before passing to `<a href>`. XSS defence in case yt-dlp ever returns a `javascript:` URL.
+- ProgressModal `useEffect` no longer reruns on `done` flip → no stale second EventSource.
+- Stepper "current" is first-undone-in-order (was lighting up every future step simultaneously).
+- nginx `limit_except GET` so cached GET reads don't burn the rate-limit burst window.
+
+### Day-4 tech-debt punted (for a Day-5+ hardening pass — NOT blocking demo)
+
+Tracked from the same 3-agent review:
+
+- **Refactor 5 module-level dicts into a `Run` class** (`backend/api.py`). Today: `_RUN_QUEUES`, `_RUN_META`, `_RUN_EVENTS_LOG`, `_TICKER_LOCKS`, `_POST_HISTORY`. Memory grows in `_TICKER_LOCKS` and `_POST_HISTORY` per unique-ticker / per-unique-IP. `_purge_old_runs` cleans 3 of 5 only.
+- **Delete legacy `services/audio.py` helpers**: `probe_youtube_source`, `fetch_earnings_audio`, `slice_clip`, `_build_search_query`. Verified unused via grep. ~80 lines.
+- **Tighten `_issuer_token_match`** — 1- to 3-char tickers (A, T, V, AI, IT) cross-match arbitrary uploaders. Require ticker length ≥ 3 for the ticker-fallback token, or only apply ticker-fallback when issuer-name tokens yield no match.
+- **Bidi/Unicode strip on uploader/title** at manifest write. Bidi-control codepoints survive React JSX-escape and let attackers visually spoof tier badges + warnings.
+- **Methodology drift-check** — `MIN_CANDIDATE_SCORE`, T1-T4 labels, `RATE_LIMIT_BURST` are recited as prose in `/methodology` page. Regression script that greps + diffs against the Python constants would prevent silent drift.
+- **SSE max-connections cap in nginx** — `limit_conn perip 3` on `/api/research/*/stream`. Without it, slowloris-style EventSource holds exhaust the worker.
+- **Re-order recency vs report-date** — `services/ingest.py` passes `filings["10-Q"].filed` (the post-call filing date, ~4-6 wk after the call). Should pass `report_date` (period-end). Today's selector still wins on real demo tickers but the math is wrong on a corner case.
+- **Cascade `_normalize_issuer`** — single-pass regex leaves "Alibaba Group Holding" after stripping `Limited`. A second pass would strip `Holding`. Today not hurting NVDA/TSLA/PLTR.
+- **Prompt-injection sanity check post-Speechmatics** — paranoid mode rejecting claims whose `evidence_excerpt` matches "ignore previous instructions" etc.
+
+### Vultr live state at handoff time
+
+- `data/NVDA/` — present, but manifest is Day-1 vintage with NO `sources` block. Dashboard shows audio player but no tier badge / candidates audit. Either re-ingest with `--force` ($0.40 + 7 min) or accept the gap.
+- `data/TSLA/` — present, manifest backfilled to `audio_tier: T1_verified_primary, audio_score: 135` (Tesla official Q1 2026 webcast).
+- `data/PLTR/` — present, T1 score 125 (Palantir Technologies Q1 2026 webcast), 100% diarization, 8 speakers, 3 disputed facts top materiality 10/10.
+- `/api/tickers` returns NVDA + PLTR + TSLA. Chip set on landing page should render all three.
+- Backend + frontend live at `http://80.240.26.175`.
+- nginx config — original `location /api/` block present; the **new** rate-limited regex block from `deploy/nginx-snippet.conf` has NOT been pasted into `/etc/nginx/sites-enabled/diligence` yet. Backend in-process rate limiter is the only enforcement until that lands.
+
+### Day-4 Codex + npm + macOS XProtect incident (resolved as "skip codex")
+
+Tried `npm install -g @openai/codex` to add a fourth adversarial-review angle. macOS XProtect / Gatekeeper raised a malware warning, said the laptop was NOT affected, but moved the installed binary to Trash automatically. Mirel asked: false-positive or real?
+
+**Diagnosis:**
+- "Not affected" + auto-quarantine → precautionary quarantine, not confirmed malware detection. Classic XProtect signature on a freshly-installed unsigned native binary downloaded by npm.
+- `@openai/codex` 1.x is rewritten in Rust and ships a native binary that is NOT Apple-notarized by OpenAI. XProtect quarantines every such binary on first execution.
+- This matches a widely-reported macOS pattern for new npm-published Rust CLIs.
+
+**Decision: do NOT reinstall Codex CLI for now.** Reasons:
+1. The 3-Claude parallel sub-agent adversarial pass surfaced 154 findings — fully covered the dismantle work Codex would have done.
+2. Reinstalling re-triggers XProtect, re-quarantines the file, same Bin.
+3. Proper allowlist requires (a) verifying maintainer accounts on npm + repo URL match `github.com/openai/codex`, (b) System Settings → Privacy & Security → "Allow Anyway", (c) optionally `xattr -d com.apple.quarantine` on the binary. Skip all that under demo time pressure.
+4. The quarantined file in Trash is inert. Safe to leave or empty Trash.
+
+**Next-session action if you want Codex back:** verify maintainers (`npm view @openai/codex maintainers`), then reinstall + manually allow via macOS Settings. Skip until post-demo.
+
+## Day-5 critical path (next session, in order)
+
+| # | Item | Estimate | Notes |
+|---|------|----------|-------|
+| 1 | First-thing checks | 5 min | `git status` (should be clean), `curl -s http://80.240.26.175/api/tickers \| jq` (should show NVDA + PLTR + TSLA), `git log --oneline -10` (`fd0c6da` at top), confirm Vultr `git pull` ran. |
+| 2 | OPTIONAL — NVDA re-ingest | 7 min + ~$0.40 | `ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence /srv/diligence/.venv/bin/python -m scripts.precache NVDA --yes'`. Updates NVDA manifest to new schema (tier badge + candidates table). EARNMOAR will likely stay T4. |
+| 3 | OPTIONAL — apply nginx limit_req_zone | 15 min | Paste contents of `deploy/nginx-snippet.conf` into `/etc/nginx/sites-enabled/diligence` (ABOVE `location /` catch-all). Add `limit_req_zone $binary_remote_addr zone=diligence_post:10m rate=6r/m;` into `/etc/nginx/nginx.conf` http block. `nginx -t` then `systemctl reload nginx`. |
+| 4 | OPTIONAL — Codex CLI revisit | 10 min | `npm view @openai/codex maintainers repository.url` to verify legit. If OK, reinstall + System Settings → "Allow Anyway" on the quarantined binary. Then `/codex:adversarial-review --base 4219f98` runs the fourth-angle pass. |
+| 5 | Phase 9 — demo video | 60 min | Script in "Demo video script" section below. Target 180 s. Cover: landing → click PLTR chip → ProgressModal flash → dashboard with T1 tier badge + audit candidates table → click bull/bear bars → click transcript word → seek audio → form input "MSFT" (cold path live demo, OR pre-record this) → ProgressModal live stepper → cut to dashboard. |
+| 6 | Hackathon submission | 30 min | Submit to lablab.ai Milan AI Week '26. Video link + GitHub link + http://80.240.26.175. README already polished. |
+
+**Day-5 budget: ~2-3 h focused if items 2-4 are skipped, ~4 h if all included.**
+
+## Day-5 demo video script (180 s rough)
+
+| Time | Beat | Spoken |
+|------|------|--------|
+| 0:00–0:10 | Land on `/`, scroll hero | "Diligence reads SEC filings and the latest earnings call, runs five adversarial agents, and surfaces what bull and bear disagree on." |
+| 0:10–0:25 | Click PLTR chip → ProgressModal cached path → /research/PLTR | "Pre-cached tickers are instant — let's open Palantir." |
+| 0:25–0:55 | Show materiality bar chart, click top bar | "Three disputed facts ranked 10/8/8 by materiality. Click any to focus." |
+| 0:55–1:20 | Show bull + bear columns + claim chips | "Each side cites primary-source claim IDs from the 10-K, 10-Q, or transcript. Uncited assertions are flagged." |
+| 1:20–1:40 | Click "Audit" → show SEC filing links + audio candidates table | "Provenance is auditable. Palantir's Q1 2026 webcast won over 12 other candidates — selector picked the issuer's own channel autonomously." |
+| 1:40–2:00 | Scroll to transcript, click a word | "Click any word to seek the audio. Speaker labels from Speechmatics diarization." |
+| 2:00–2:30 | Back home, type "AMD" + Run | "Or type your own ticker. EDGAR + FMP + autonomous YouTube selection + Speechmatics + five agents — about six minutes end to end." |
+| 2:30–3:00 | ProgressModal showing live stepper | (Pre-record this section if Speechmatics is slow on the day.) "When it finishes, you land on the dashboard. Same shape. Same audit trail." |
+
+## Open punch list (not blocking demo)
+
+- [ ] Nginx limit_req_zone applied on Vultr (item 3 above)
+- [ ] NVDA re-ingest decision (item 2 above) — defaults to "leave Day-1 vintage"
+- [ ] Codex CLI verify + reinstall (item 4 above)
+- [ ] Phase 9 demo video (item 5 above) — only true blocker for submission
+
+## Next-session resume prompt (paste into a fresh Claude session)
+
+```
+Day-5 on Diligence. Read HANDOFF.md first — Day-4 is fully complete
+and pushed (13 commits, fd0c6da is HEAD). 8 of 9 phases done; only
+Phase 9 (demo video) and a few elective Vultr items remain.
+
+First-thing checks:
+
+  git status                              # should be clean
+  git log --oneline -5                    # fd0c6da at top
+  curl -s http://80.240.26.175/api/tickers | jq
+  # should show NVDA + PLTR + TSLA; PLTR audio_tier T1 score 125, TSLA T1 135.
+
+Auth verification (always):
+
+  cd ~/diligence && source .venv/bin/activate
+  gcloud config configurations activate hackathon
+  python -c "from vertex_client import get_client; c = get_client(); print(c.models.generate_content(model='gemini-2.5-flash', contents='Reply OK').text)"
+
+Critical path (Day-5):
+
+  1. Confirm Vultr is on fd0c6da; if not, run the deploy command
+     in HANDOFF.md "Vultr live state at handoff time".
+  2. OPTIONAL re-ingest NVDA (~$0.40, ~7 min) so its manifest gets
+     the new tier schema. Default: skip.
+  3. OPTIONAL paste deploy/nginx-snippet.conf into Vultr nginx config
+     (limit_req_zone + the regex location block). Default: skip.
+  4. OPTIONAL — verify @openai/codex maintainers on npm, reinstall +
+     allow via macOS System Settings if happy. Default: skip.
+  5. **Phase 9 demo video.** Script in HANDOFF.md "Day-5 demo video
+     script". Target 180 s.
+  6. Submit to lablab.ai Milan AI Week '26.
+
+Hard rules unchanged:
+
+  - gcloud auth application-default login → NEVER (RobotBoy ADC)
+  - git add -A or . → NEVER (stage specific paths)
+  - httpx + httpcore INFO muted in every new module
+  - AskUserQuestion dropdowns broken in Mirel's UI — ask in prose
+  - google-genai 2.3 GC race: bind client to a variable before calling
+    .models.generate_content(...). One-liner triggers crash.
+  - For adversarial audits, use Codex (when reinstalled) + multiple
+    general-purpose Claude sub-agents in dismantle mode — NEVER the
+    compressed caveman-reviewer. (See feedback_adversarial_audits_full_force
+    memory.)
+
+Tech-debt punted from Day-4 (HANDOFF.md "Day-4 tech-debt punted"):
+collapse 5 module-level dicts to Run class, delete legacy audio
+helpers, tighten _issuer_token_match for 1-3 char tickers, bidi-strip
+uploader/title, methodology drift-check script, nginx SSE limit_conn,
+recency vs report-date.
+
+Vultr SSH: ssh root@80.240.26.175.
+Frontend live: http://80.240.26.175
+Caveman mode persistent across sessions (SessionStart hook). Code,
+commits, security warnings always in normal English.
+```
+
+---
+
+
 
 ## Day-3 progress so far (commit `a531d32`)
 
