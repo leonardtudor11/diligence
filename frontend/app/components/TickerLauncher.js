@@ -52,7 +52,7 @@ export default function TickerLauncher() {
   };
 
   return (
-    <div className="mt-7 flex w-full max-w-xl flex-col items-center gap-4">
+    <div className="mt-7 flex w-full max-w-xl flex-col items-center gap-3">
       <form
         onSubmit={onSubmit}
         className="flex w-full flex-col items-stretch gap-2 sm:flex-row"
@@ -66,10 +66,10 @@ export default function TickerLauncher() {
           type="text"
           value={ticker}
           onChange={(e) => setTicker(e.target.value.toUpperCase().slice(0, 6))}
-          placeholder="Type a ticker — NVDA, TSLA, PLTR …"
+          placeholder="Enter a ticker (e.g. AAPL)"
           autoComplete="off"
           spellCheck={false}
-          className="h-12 flex-1 rounded-md border border-border/60 bg-secondary/30 px-4 font-mono text-sm uppercase tracking-[0.2em] text-foreground placeholder:text-foreground/40 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="h-12 flex-1 rounded-md border border-border/60 bg-secondary/30 px-4 font-mono text-sm uppercase tracking-[0.2em] text-foreground placeholder:text-foreground/40 placeholder:tracking-[0.1em] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
         />
         <button
           type="submit"
@@ -84,28 +84,29 @@ export default function TickerLauncher() {
         </p>
       ) : null}
 
-      <div className="flex w-full flex-col items-center gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-foreground/40">
-          {chipsLoading ? "Loading cached tickers…" : "Or jump into a cached run"}
+      {/* Cached-run chips inline with a single "Try" label so the form
+          and the chip strip read as one horizontal mass instead of two
+          differently-sized centered blocks. */}
+      <div className="flex w-full flex-wrap items-center justify-center gap-x-2 gap-y-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-foreground/45">
+          {chipsLoading ? "Loading…" : "Try"}
         </p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {chips.map((c) => (
-            <button
-              key={c.ticker}
-              type="button"
-              onClick={() => launch(c.ticker)}
-              className="group inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/30 px-4 py-2 font-mono text-xs uppercase tracking-[0.2em] text-foreground/85 transition-colors hover:border-accent hover:text-accent"
-              title={c.company || c.ticker}
-            >
-              <span className="font-semibold">{c.ticker}</span>
-              {c.audio_tier ? (
-                <span className="rounded bg-background/40 px-1.5 py-0.5 text-[9px] font-medium tracking-wider text-foreground/60 group-hover:text-accent/80">
-                  {c.audio_tier.split("_")[0]}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        {chips.map((c) => (
+          <button
+            key={c.ticker}
+            type="button"
+            onClick={() => launch(c.ticker)}
+            className="group inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/30 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.15em] text-foreground/85 transition-colors hover:border-accent hover:text-accent"
+            title={c.company || c.ticker}
+          >
+            <span className="font-semibold">{c.ticker}</span>
+            {c.audio_tier ? (
+              <span className="rounded bg-background/40 px-1 py-0.5 text-[9px] font-medium tracking-wider text-foreground/55 group-hover:text-accent/80">
+                {c.audio_tier.split("_")[0]}
+              </span>
+            ) : null}
+          </button>
+        ))}
       </div>
 
       {run ? (

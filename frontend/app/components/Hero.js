@@ -55,9 +55,6 @@ export default function Hero() {
         agents debate the evidence. You see the disputed facts, ranked by
         materiality.
       </p>
-      <p className="mt-3 max-w-xl text-center font-mono text-xs uppercase tracking-[0.3em] text-foreground/40">
-        Built for the analyst who skips the first eight hours.
-      </p>
 
       <TickerLauncher />
 
@@ -68,7 +65,7 @@ export default function Hero() {
         How it works →
       </a>
 
-      <div className="hero-strip mt-12 w-full max-w-6xl">
+      <div className="hero-strip mt-10 w-full max-w-6xl">
         <p className="mb-3 text-center font-mono text-[10px] uppercase tracking-[0.4em] text-foreground/40">
           Coverage on day one
         </p>
