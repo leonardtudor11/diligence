@@ -35,7 +35,11 @@ function speakerColor(label) {
 // inverted the warning semantics — the LEAST trustworthy tier looked
 // the calmest on the dashboard. Now uses the destructive accent so the
 // user sees the warning at a glance.
-const TIER_BADGE = {
+// AuditTab reuses this badge table for the candidates-considered list so
+// the colour grammar stays consistent between the transcript-player
+// header and the audit drill-down. Named-export pattern mirrors Session
+// 5's ClaimChip extraction.
+export const TIER_BADGE = {
   T1_verified_primary:    { short: "T1", text: "Issuer-named",         accent: "bg-accent/20 text-accent border-accent/40" },
   T2_trusted_aggregator:  { short: "T2", text: "Trusted aggregator",   accent: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
   T3_editorial_aggregator:{ short: "T3", text: "Editorial aggregator", accent: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40" },

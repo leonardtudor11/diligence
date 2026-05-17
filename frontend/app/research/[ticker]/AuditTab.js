@@ -1,5 +1,7 @@
 "use client";
 
+import { TIER_BADGE } from "./TranscriptPlayer";
+
 // Reject any non-http(s) URL before rendering as an <a href>. A
 // poisoned candidate URL with a `javascript:` scheme is otherwise an
 // active XSS sink, target="_blank" notwithstanding.
@@ -83,69 +85,7 @@ export default function AuditTab({
       </div>
 
       {candidates.length > 0 ? (
-        <details className="mt-5" open={false}>
-          <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.3em] text-foreground/55">
-            Audio candidates considered ({candidates.length})
-            {audioSource?.queries?.length ? (
-              <span className="ml-2 normal-case tracking-normal text-foreground/40">
-                queries: {audioSource.queries.join(" · ")}
-              </span>
-            ) : null}
-          </summary>
-          <table className="mt-3 w-full border-separate border-spacing-y-1 font-mono text-xs">
-            <thead>
-              <tr className="text-left text-foreground/45">
-                <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Score</th>
-                <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Tier</th>
-                <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Uploader</th>
-                <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Title</th>
-                <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Upload</th>
-              </tr>
-            </thead>
-            <tbody>
-              {candidates.map((c, i) => {
-                const isWinner =
-                  audioSource?.url && c.url && audioSource.url === c.url;
-                return (
-                  <tr
-                    key={i}
-                    className={
-                      isWinner
-                        ? "bg-accent/10 text-foreground"
-                        : "text-foreground/75 hover:bg-background/30"
-                    }
-                  >
-                    <td className="px-2 py-1 font-semibold">{c.score}</td>
-                    <td className="px-2 py-1 text-foreground/60">
-                      {c.tier ? c.tier.split("_")[0] : "—"}
-                    </td>
-                    <td className="px-2 py-1">{c.uploader || "—"}</td>
-                    <td className="px-2 py-1 truncate max-w-[24rem]" title={c.title}>
-                      {(() => {
-                        const href = safeHref(c.url);
-                        return href ? (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-accent"
-                          >
-                            {c.title || href}
-                          </a>
-                        ) : (
-                          c.title || "—"
-                        );
-                      })()}
-                    </td>
-                    <td className="px-2 py-1 text-foreground/55">
-                      {fmtUploadDate(c.upload_date)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </details>
+        <CandidatesPanel candidates={candidates} audioSource={audioSource} />
       ) : null}
 
       {shared?.length > 0 && (
@@ -161,6 +101,123 @@ export default function AuditTab({
         </details>
       )}
     </section>
+  );
+}
+
+function CandidatesPanel({ candidates, audioSource }) {
+  const winnerUrl = audioSource?.url;
+  const winnerBadge = audioSource?.tier ? TIER_BADGE[audioSource.tier] : null;
+  // Bar width is relative to the highest score in the list, so the
+  // winner's bar fills the column and runners-up shrink in proportion.
+  // `max(1, …)` guards a degenerate top-of-list-is-zero edge.
+  const maxScore = Math.max(1, ...candidates.map((c) => c.score || 0));
+
+  return (
+    <details className="mt-5" open={true}>
+      <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.3em] text-foreground/55">
+        Audio candidates
+        <span className="ml-2 normal-case tracking-normal text-foreground/70">
+          picked{" "}
+          {winnerBadge ? (
+            <span className={`mx-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold tracking-wider ${winnerBadge.accent}`}>
+              {winnerBadge.short} · {winnerBadge.text}
+            </span>
+          ) : null}
+          score{" "}
+          <span className="font-semibold text-foreground">
+            {audioSource?.score ?? "—"}
+          </span>{" "}
+          over {Math.max(0, candidates.length - 1)} alternative
+          {candidates.length === 2 ? "" : "s"}
+        </span>
+        {audioSource?.queries?.length ? (
+          <span className="ml-2 normal-case tracking-normal text-foreground/40">
+            queries: {audioSource.queries.join(" · ")}
+          </span>
+        ) : null}
+      </summary>
+
+      {/* Horizontal scroll on narrow screens so the 5-column table stays
+          legible on mobile rather than collapsing into a wall of stacked
+          text. Minimum width preserves column intent. */}
+      <div className="mt-3 -mx-1 overflow-x-auto">
+        <table className="w-full min-w-[600px] border-separate border-spacing-y-1 font-mono text-xs">
+          <thead>
+            <tr className="text-left text-foreground/45">
+              <th className="px-2 py-1 font-medium uppercase tracking-[0.2em] w-[110px]">Score</th>
+              <th className="px-2 py-1 font-medium uppercase tracking-[0.2em] w-[140px]">Tier</th>
+              <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Uploader</th>
+              <th className="px-2 py-1 font-medium uppercase tracking-[0.2em]">Title</th>
+              <th className="px-2 py-1 font-medium uppercase tracking-[0.2em] w-[110px]">Upload</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((c, i) => {
+              const isWinner = winnerUrl && c.url && winnerUrl === c.url;
+              const badge = c.tier ? TIER_BADGE[c.tier] : null;
+              const pct = Math.max(2, Math.min(100, ((c.score || 0) / maxScore) * 100));
+              const href = safeHref(c.url);
+              return (
+                <tr
+                  key={i}
+                  className={
+                    isWinner
+                      ? "bg-accent/10 text-foreground"
+                      : "text-foreground/75 hover:bg-background/30"
+                  }
+                >
+                  <td className="px-2 py-1 align-middle">
+                    <div className="flex items-center gap-2">
+                      <span className="w-7 shrink-0 text-right font-semibold">
+                        {c.score ?? "—"}
+                      </span>
+                      <div className="h-1.5 w-16 overflow-hidden rounded bg-foreground/10">
+                        <div
+                          className={`h-full ${isWinner ? "bg-accent" : "bg-foreground/40"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-2 py-1 align-middle">
+                    {badge ? (
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold tracking-wider ${badge.accent}`}>
+                        {badge.short} · {badge.text}
+                      </span>
+                    ) : (
+                      <span className="text-foreground/45">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1 align-middle">
+                    {isWinner ? (
+                      <span className="mr-1 text-accent" aria-label="winner">✓</span>
+                    ) : null}
+                    {c.uploader || "—"}
+                  </td>
+                  <td className="px-2 py-1 truncate max-w-[24rem] align-middle" title={c.title}>
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-accent"
+                      >
+                        {c.title || href}
+                      </a>
+                    ) : (
+                      c.title || "—"
+                    )}
+                  </td>
+                  <td className="px-2 py-1 text-foreground/55 align-middle">
+                    {fmtUploadDate(c.upload_date)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 
