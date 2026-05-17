@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DisputedFactsChart from "./DisputedFactsChart";
 import PillarColumn from "./PillarColumn";
 import DisputedFactCard from "./DisputedFactCard";
@@ -9,6 +10,10 @@ import TranscriptPlayer from "./TranscriptPlayer";
 import AuditTab from "./AuditTab";
 
 export default function Dashboard({ ticker, payload }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const { agents, transcript_words: words = [], has_audio, manifest } = payload;
   const reconciliation = agents.reconciliation;
   const bull = agents.bull;
@@ -22,8 +27,42 @@ export default function Dashboard({ ticker, payload }) {
   };
   const manifestWarnings = manifest?.warnings || [];
 
-  const [activeFactIdx, setActiveFactIdx] = useState(0);
+  const disputed = reconciliation?.disputed_facts ?? [];
+
+  // Hydrate the focused-fact index from `?fact=N`. Out-of-range values
+  // fall back to 0 so a stale shared link never blanks the dashboard.
+  // Done lazily so the initial render reads the URL exactly once.
+  const initialFactIdx = (() => {
+    const raw = searchParams?.get("fact");
+    if (!raw) return 0;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    if (disputed.length === 0) return 0;
+    return Math.min(n, disputed.length - 1);
+  })();
+  const [activeFactIdx, setActiveFactIdx] = useState(initialFactIdx);
   const [showAudit, setShowAudit] = useState(false);
+
+  // Sync URL on focus change. router.replace (not push) so the browser
+  // history isn't polluted with one entry per bar click. Param is
+  // omitted entirely when activeFactIdx === 0 so the canonical URL
+  // stays /research/T without a noisy ?fact=0 tail.
+  useEffect(() => {
+    if (!searchParams || !pathname) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (activeFactIdx === 0) {
+      params.delete("fact");
+    } else {
+      params.set("fact", String(activeFactIdx));
+    }
+    const qs = params.toString();
+    const next = qs ? `${pathname}?${qs}` : pathname;
+    const current =
+      pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
+    if (next !== current) {
+      router.replace(next, { scroll: false });
+    }
+  }, [activeFactIdx, pathname, router, searchParams]);
 
   // Build claim_id → Claim index for the disputed-fact card to render
   // citations inline without re-scanning every render.
@@ -34,7 +73,6 @@ export default function Dashboard({ ticker, payload }) {
     return out;
   }, [filing, call]);
 
-  const disputed = reconciliation?.disputed_facts ?? [];
   const activeFact = disputed[activeFactIdx];
 
   return (
