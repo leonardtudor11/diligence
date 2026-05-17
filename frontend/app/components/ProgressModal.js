@@ -161,11 +161,11 @@ export default function ProgressModal({ ticker, runId, cached, onClose }) {
               >
                 <span
                   className={
-                    "inline-block h-2 w-2 rounded-full " +
+                    "inline-block h-2.5 w-2.5 rounded-full transition-colors " +
                     (isDone
                       ? "bg-accent shadow-[0_0_8px_rgba(34,197,94,0.7)]"
                       : isCurrent
-                      ? "animate-pulse bg-foreground/60"
+                      ? "animate-pulse bg-accent shadow-[0_0_10px_rgba(34,197,94,0.55)]"
                       : "bg-foreground/15")
                   }
                 />

@@ -6,10 +6,18 @@
   --primary: #0F172A;
   --secondary: #1E293B;
   --accent: #22C55E;
+  --accent-bright: #34D399;
+  --accent-deep: #15803D;
   --muted: #1A1E2F;
   --border: #334155;
   --destructive: #EF4444;
   --ring: #0F172A;
+  /* Matches Spline 3D chart palette (right-side magenta surface). Used for
+     materiality intensity in the dashboard bar chart so the dashboard ties
+     visually back to the landing-page teaser. */
+  --materia: #A855F7;
+  --materia-bright: #D946EF;
+  --materia-deep: #7E22CE;
 }
 
 @theme inline {
@@ -18,9 +26,14 @@
   --color-primary: var(--primary);
   --color-secondary: var(--secondary);
   --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-deep: var(--accent-deep);
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-materia: var(--materia);
+  --color-materia-bright: var(--materia-bright);
+  --color-materia-deep: var(--materia-deep);
   --color-ring: var(--ring);
   --font-display: var(--font-display);
   --font-mono: var(--font-mono);

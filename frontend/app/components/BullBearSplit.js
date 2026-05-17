@@ -10,14 +10,14 @@ gsap.registerPlugin(ScrollTrigger);
 /**
  * Split-screen Bull vs Bear section.
  *
- * Color mapping inverts the market convention at the user's request:
- *   left half  = BEAR  on green tint (would normally be red)
- *   right half = BULL  on red tint   (would normally be green)
- *
- * On scroll-in: both animals start offscreen, charge inward, collide, and
+ * On scroll-in: both animals charge inward from offscreen, collide, and
  * shake. Pure GSAP timeline driven by ScrollTrigger. prefers-reduced-motion
- * collapses everything to a static layout via the JS guard below + the CSS
- * backstop in globals.css.
+ * collapses everything to a static layout.
+ *
+ * Initial-state positioning happens INSIDE the timeline (`tl.set`) rather
+ * than via `gsap.set` at mount, so the animals stay visible until the
+ * ScrollTrigger actually fires. Without this, the section rendered blank
+ * for ~600ms after first paint and looked broken in screen recordings.
  */
 
 export default function BullBearSplit() {
@@ -37,19 +37,19 @@ export default function BullBearSplit() {
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: ref.current,
-          start: "top 70%",
+          start: "top 85%",
           toggleActions: "play none none reverse",
         },
         defaults: { ease: "power3.out" },
       });
 
-      // Start state — both animals offscreen, spark + stats hidden.
-      gsap.set(".bb-bear", { xPercent: -240, opacity: 0 });
-      gsap.set(".bb-bull", { xPercent: 240, opacity: 0 });
-      gsap.set(".bb-spark", { opacity: 0, scale: 0 });
-      gsap.set(".bb-stat", { opacity: 0, y: 14 });
-
       tl
+        // Start state — kept INSIDE the timeline so animals stay visible
+        // until the ScrollTrigger actually fires.
+        .set(".bb-bear",  { xPercent: -240, opacity: 0 })
+        .set(".bb-bull",  { xPercent:  240, opacity: 0 })
+        .set(".bb-spark", { opacity: 0, scale: 0 })
+        .set(".bb-stat",  { opacity: 0, y: 14 })
         // Charge inward — accelerating ease so the impact reads as fast.
         .to(".bb-bear", {
           xPercent: 0,

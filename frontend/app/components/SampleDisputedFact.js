@@ -214,10 +214,6 @@ export default function SampleDisputedFact() {
           Every claim links back to the source filing section or transcript
           timestamp; the human decides.
         </p>
-
-        <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-foreground/35">
-          Live runs ship once the agent layer is wired · filing analyst complete · bull / bear / reconciler in progress
-        </p>
       </div>
     </section>
   );

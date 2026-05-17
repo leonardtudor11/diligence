@@ -75,12 +75,25 @@ function ClaimChip({ id, claim, tone }) {
       ? "border-accent/30 bg-accent/10 text-accent"
       : "border-destructive/30 bg-destructive/10 text-destructive";
   const title = claim?.text || `Unknown claim ${id}`;
+  // Inline the first chunk of the claim text so judges scanning the
+  // dashboard don't have to hover every chip to see what it represents.
+  const excerpt = claim?.text ? truncate(claim.text, 42) : null;
   return (
     <span
       title={title}
-      className={`cursor-help rounded border px-1.5 py-0.5 font-mono text-[10px] ${color}`}
+      className={`group cursor-help inline-flex max-w-full items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono text-[10px] ${color}`}
     >
-      {id}
+      <span className="font-semibold">{id}</span>
+      {excerpt ? (
+        <span className="hidden truncate text-foreground/70 sm:inline-block sm:max-w-[18ch]">
+          {excerpt}
+        </span>
+      ) : null}
     </span>
   );
+}
+
+function truncate(s, n) {
+  if (!s) return "";
+  return s.length <= n ? s : s.slice(0, n - 1).trimEnd() + "…";
 }

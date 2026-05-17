@@ -6,16 +6,30 @@ import { startResearch } from "../../../lib/api";
 import ProgressModal from "../../components/ProgressModal";
 
 const TICKER_RE = /^[A-Za-z0-9]{1,6}$/;
+// Heuristic for obviously-fake tickers (all same character, contains forbidden
+// SEC patterns). Doesn't replace a real EDGAR allowlist but catches the most
+// common fat-finger / demo-typo failure mode without paying the price of
+// shipping the 11k-entry SEC ticker list to the client.
+const JUNK_RE = /^(.)\1{1,}$|^(XXX|ZZZ|TEST|AAAA|JUNK|NULL)/i;
 
 export default function NotIngestedYet({ ticker }) {
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   const valid = TICKER_RE.test(ticker);
+  const looksJunk = valid && JUNK_RE.test(ticker || "");
 
   const launch = async () => {
     if (!valid) {
       setError(`'${ticker}' is not a valid ticker. Expected 1–6 letters or digits (e.g. NVDA).`);
+      return;
+    }
+    if (looksJunk && !confirmed) {
+      setError(
+        `'${ticker}' looks like a placeholder, not a real ticker. Running the pipeline still spends API credits. Click "Run anyway" to confirm.`
+      );
+      setConfirmed(true);
       return;
     }
     setError(null);
@@ -47,13 +61,26 @@ export default function NotIngestedYet({ ticker }) {
         </p>
       ) : null}
 
+      {valid && looksJunk ? (
+        <p className="mt-4 max-w-md text-center font-mono text-xs text-yellow-300">
+          ⚠ &apos;{ticker}&apos; looks like a placeholder — running the
+          pipeline still spends real API credits.
+        </p>
+      ) : null}
+
       <button
         type="button"
         onClick={launch}
         disabled={!valid}
-        className="mt-7 inline-flex h-12 items-center justify-center rounded-md bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        className={`mt-7 inline-flex h-12 items-center justify-center rounded-md px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
+          looksJunk && !confirmed
+            ? "bg-yellow-500 text-background"
+            : "bg-accent"
+        }`}
       >
-        Run diligence on {ticker}
+        {looksJunk && !confirmed
+          ? `Run anyway on ${ticker}`
+          : `Run diligence on ${ticker}`}
       </button>
 
       {error ? (

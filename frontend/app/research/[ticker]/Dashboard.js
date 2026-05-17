@@ -39,8 +39,10 @@ export default function Dashboard({ ticker, payload }) {
 
   return (
     <main className="flex flex-1 flex-col px-6 py-10 sm:px-10">
-      {/* Top bar */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      {/* Top bar — grid keeps title and badges on dedicated rows so the
+          header never overflows or wraps unpredictably between desktop
+          and mobile. */}
+      <header className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <Link
             href="/"
@@ -53,34 +55,34 @@ export default function Dashboard({ ticker, payload }) {
             <span className="text-foreground/40">— adversarial dossier</span>
           </h1>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge label="Filing claims" value={filing?.claims?.length ?? 0} />
-          <Badge label="Call claims" value={call?.claims?.length ?? 0} />
-          <Badge label="Disputed facts" value={disputed.length} accent />
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:justify-end">
+          <Badge label="Filing" value={filing?.claims?.length ?? 0} />
+          <Badge label="Call" value={call?.claims?.length ?? 0} />
+          <Badge label="Disputed" value={disputed.length} accent />
           {reconciliation?.integrity_warnings?.length > 0 && (
             <button
               onClick={() => setShowAudit((v) => !v)}
-              className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-1 font-mono text-xs text-destructive hover:bg-destructive/20"
+              className="col-span-3 rounded-md border border-destructive/60 bg-destructive/10 px-3 py-1.5 font-mono text-xs text-destructive hover:bg-destructive/20 sm:col-span-1"
             >
               {reconciliation.integrity_warnings.length} audit ⚠
             </button>
           )}
           <button
             onClick={() => setShowAudit((v) => !v)}
-            className="rounded-md border border-border/60 bg-secondary/40 px-3 py-1 font-mono text-xs text-foreground/80 hover:bg-secondary/60"
+            className="col-span-3 rounded-md border border-border/60 bg-secondary/40 px-3 py-1.5 font-mono text-xs text-foreground/80 hover:bg-secondary/60 sm:col-span-1"
           >
             Audit
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Confidence-downgrade banner */}
       {reconciliation?.confidence_downgrade_reason && (
-        <div className="mb-6 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-4 py-3">
-          <p className="font-mono text-xs uppercase tracking-[0.3em] text-yellow-300/80">
+        <div className="mb-6 rounded-md border border-yellow-500/50 bg-yellow-500/10 px-4 py-3">
+          <p className="font-mono text-xs uppercase tracking-[0.3em] text-yellow-200">
             Confidence downgrade
           </p>
-          <p className="mt-1 font-mono text-sm text-yellow-100/90">
+          <p className="mt-1 font-mono text-sm text-yellow-100">
             {reconciliation.confidence_downgrade_reason}
           </p>
         </div>
@@ -194,7 +196,7 @@ export default function Dashboard({ ticker, payload }) {
 function Badge({ label, value, accent }) {
   return (
     <div
-      className={`flex items-baseline gap-2 rounded-md border px-3 py-1 font-mono text-xs ${
+      className={`flex items-baseline gap-2 rounded-md border px-3 py-1.5 font-mono text-xs ${
         accent
           ? "border-accent/40 bg-accent/10 text-accent"
           : "border-border/60 bg-secondary/30 text-foreground/80"
