@@ -183,10 +183,19 @@ def get_research(ticker: str) -> JSONResponse:
             detail=f"{ticker.upper()} ingested but reconciliation missing — run agents.run first",
         )
 
+    manifest_path = td / "manifest.json"
+    manifest: dict | None = None
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError as e:
+            logger.error("malformed manifest at %s: %s", manifest_path, e)
+
     return JSONResponse(
         {
             "ticker": ticker.upper(),
             "agents": agents,
+            "manifest": manifest,
             "transcript_words": _load_transcript_words(td),
             "has_audio": (td / "earnings_call.mp3").exists(),
         }

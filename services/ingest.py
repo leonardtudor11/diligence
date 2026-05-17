@@ -109,11 +109,25 @@ def ingest(
 
     # ---- 3. Audio acquisition ----
     audio_path: Path | None = None
+    audio_provenance: dict | None = None
     if skip_audio:
         log.info("Audio: skipped (--skip-audio)")
     else:
         try:
-            log.info("Audio: ensuring earnings-call MP3 for %s", ticker)
+            log.info("Audio: probing YouTube for %s", ticker)
+            audio_provenance = audio.probe_youtube_source(
+                ticker, quarter=quarter, year=year
+            )
+            if audio_provenance:
+                log.info(
+                    "Audio: candidate '%s' by %s (%ds) — %s",
+                    audio_provenance.get("title"),
+                    audio_provenance.get("uploader"),
+                    audio_provenance.get("duration_seconds") or 0,
+                    audio_provenance.get("url"),
+                )
+
+            log.info("Audio: downloading MP3")
             audio_path = audio.fetch_earnings_audio(
                 ticker, quarter=quarter, year=year
             )
@@ -122,6 +136,10 @@ def ingest(
         except AudioNotAvailable as e:
             log.error("Audio: %s", e)
             warnings.append(f"Audio: {e}")
+            # Clear the probe metadata too — the candidate URL/uploader
+            # describe a video we ultimately failed to fetch, and writing
+            # it into manifest.sources.audio would mislead the dashboard.
+            audio_provenance = None
 
     # ---- 4. Speechmatics transcription ----
     transcript_path = out_dir / "transcript.json"
@@ -149,6 +167,23 @@ def ingest(
         log.info("Speechmatics: skipped (no audio available)")
 
     # ---- 5. manifest ----
+    sources: dict[str, dict | None] = {"10k": None, "10q": None, "audio": None}
+    cik_int = int(filings["cik"])
+    for form in ("10-K", "10-Q"):
+        if form in filings:
+            f = filings[form]
+            accn_nodash = f["accession"].replace("-", "")
+            sources_key = "10k" if form == "10-K" else "10q"
+            sources[sources_key] = {
+                "url": f"https://www.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{accn_nodash}/{f['primary_doc']}",
+                "accession": f["accession"],
+                "filed": f["filed"],
+                "report_date": f.get("report_date"),
+            }
+    if audio_provenance:
+        sources["audio"] = audio_provenance
+
     manifest = {
         "ticker": ticker,
         "cik": filings["cik"],
@@ -162,6 +197,7 @@ def ingest(
             "earnings_call_mp3": "earnings_call.mp3" if (out_dir / "earnings_call.mp3").exists() else None,
             "transcript": "transcript.json" if transcript_path.exists() else None,
         },
+        "sources": sources,
         "warnings": warnings,
     }
     _write_json(out_dir / "manifest.json", manifest)

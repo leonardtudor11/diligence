@@ -6,10 +6,16 @@ demos and POCs; swap to Quartr or an IR-page scraper for production.
 
 The function is idempotent: if a sized MP3 already exists at the target
 path, it's returned without re-fetching.
+
+Provenance: ``probe_youtube_source`` returns metadata about the candidate
+video *before* it's downloaded. The dashboard surfaces this so users can
+manually verify they're listening to the official call, not a third-party
+remix. See HANDOFF.md for the unverified_audio confidence band.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -27,6 +33,56 @@ def _need(binary: str) -> None:
         raise AudioNotAvailable(
             f"`{binary}` is not on PATH. Install it: brew install {binary}"
         )
+
+
+def _build_search_query(ticker: str, quarter: str | None, year: str | None) -> str:
+    if quarter and year:
+        return f"{ticker} {quarter} FY{year} earnings call"
+    if quarter:
+        return f"{ticker} {quarter} earnings call"
+    return f"{ticker} latest earnings call full audio"
+
+
+def probe_youtube_source(
+    ticker: str,
+    quarter: str | None = None,
+    year: str | None = None,
+    *,
+    min_duration_seconds: int = 1200,
+) -> dict | None:
+    """Return metadata for the top YouTube hit without downloading.
+
+    Output dict keys: ``url``, ``uploader``, ``channel``, ``title``,
+    ``duration_seconds``, ``upload_date``. Returns None if no result above
+    ``min_duration_seconds`` is found.
+
+    Used by:
+      - ingestion, to capture provenance into manifest.json
+      - precache pre-flight, to confirm a ticker has a usable call
+        before spending Speechmatics credits
+    """
+    _need("yt-dlp")
+    query = _build_search_query(ticker, quarter, year)
+    cmd = [
+        "yt-dlp",
+        "--simulate",
+        "--no-playlist",
+        "--match-filter", f"duration > {min_duration_seconds}",
+        "--print",
+        '{"url":%(webpage_url)j,"uploader":%(uploader)j,'
+        '"channel":%(channel)j,"title":%(title)j,'
+        '"duration_seconds":%(duration)j,"upload_date":%(upload_date)j}',
+        f"ytsearch1:{query}",
+    ]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    # The --print template emits one JSON object per matching entry.
+    line = result.stdout.strip().splitlines()[0]
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return None
 
 
 def fetch_earnings_audio(
@@ -58,12 +114,7 @@ def fetch_earnings_audio(
     if out_file.exists() and out_file.stat().st_size > MIN_AUDIO_BYTES:
         return out_file
 
-    if quarter and year:
-        query = f"{ticker} {quarter} FY{year} earnings call"
-    elif quarter:
-        query = f"{ticker} {quarter} earnings call"
-    else:
-        query = f"{ticker} latest earnings call full audio"
+    query = _build_search_query(ticker, quarter, year)
 
     cmd = [
         "yt-dlp",

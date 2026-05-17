@@ -1,6 +1,46 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 (Day 2 complete — all 7 agents shipped + graph + CLI runner).
+Last updated: 2026-05-17 (Day 3 complete + Day-3.5 in flight — backend, dashboard, deploy live; precache mid-flight).
+
+## Day-3 progress so far (commit `a531d32`)
+
+- ✅ `backend/api.py` — FastAPI live on Vultr.
+  - `GET  /api/research/{T}` → `{ticker, agents, manifest, transcript_words, has_audio}` (manifest field added Day-3.5).
+  - `POST /api/research/{T}` → starts background graph run, returns `run_id`. Currently does NOT trigger ingest — assumes `data/T/` already populated. Day-3.5 task to fix.
+  - `GET  /api/research/{T}/stream?run_id=...` → SSE, one event per agent-node complete. UI does not consume yet.
+  - `GET  /api/research/{T}/audio` → 206-capable ranged stream of `earnings_call.mp3`.
+  - Ticker regex `^[A-Z0-9]{1,6}$` enforced before any disk touch.
+  - httpx + httpcore loggers muted at module top.
+- ✅ Frontend dashboard route at `/research/[ticker]` — 3-column bull / disputed-focus / bear, Recharts horizontal-bar materiality chart, click-to-focus, click-bar→swap-card, downgrade banner, collapsible Audit tab, "Both sides agree" bullets, uncited ⚠ chip, source URL placeholder in TranscriptPlayer header (manifest wiring still TODO frontend-side).
+- ✅ `frontend/lib/api.js` — env-aware base URL (`DILIGENCE_API_BASE` server, `NEXT_PUBLIC_API_BASE` client, relative path in prod through nginx).
+- ✅ TranscriptPlayer — wavesurfer.js v7 + `@wavesurfer/react`, binary-search active-word highlight, six-colour speaker palette, auto-scroll, click-word → seek + auto-play.
+- ✅ Hero CTA `See the demo` retargeted to `/research/NVDA`.
+- ✅ Vultr deploy live:
+  - `systemctl status diligence-api` → active (uvicorn, single worker, `/srv/diligence/.venv/bin/uvicorn backend.api:app`).
+  - `systemctl status diligence-frontend` → active (Next.js 16 production server).
+  - nginx `/etc/nginx/sites-enabled/diligence` now has `location /api/` block spliced ABOVE `location /` catch-all. Backups in `/root/nginx-backups/`.
+  - `data/NVDA/` rsync'd to `/srv/diligence/data/NVDA/` (chown'd to diligence).
+  - Smoke: `curl http://80.240.26.175/api/health` → ok; `/api/research/NVDA` → 1.08 MB JSON; `/api/research/NVDA/audio` Range → 206. `/research/NVDA` SSR page → 200 in ~0.9 s.
+
+## Day-3.5 progress so far (post-`a531d32`, not yet committed)
+
+- ✅ `services/audio.py` — added `probe_youtube_source()` which `--simulate`s yt-dlp and returns `{url, uploader, channel, title, duration_seconds, upload_date}` without any download. `fetch_earnings_audio()` refactored to share `_build_search_query()`.
+- ✅ `services/ingest.py` — calls the probe before the download; manifest now carries a `sources` block with EDGAR 10-K/10-Q URLs (built from CIK + accession) and the audio provenance dict.
+- ✅ `backend/api.py` — GET payload now includes `manifest`. Frontend can render verifiable sources without a second round-trip.
+- ✅ `scripts/precache.py` — adversarial pre-flight + paid pipeline runner. Pre-flight checks EDGAR currency (skips delisted tickers >540 d stale on 10-K), yt-dlp probe (≥1200 s), FMP free-tier 200, uploader trust hints. Writes `scripts/precache_audit.md` per ticker. CLI: `python -m scripts.precache TSLA --dry-run|--yes`.
+- ⚠ **Real bug surfaced + fixed** in the precache pre-flight: `{f["form"]: f for f in filings}` was clobbering to the OLDEST filing because EDGAR `recent` arrays are newest-first and dict comprehension overwrites on duplicate keys. Switched to `setdefault()`. Production `services/edgar.py` was already correct via `candidates[0]`. New regression test deferred — file an issue in the next session.
+- 🟡 **TSLA precache in flight** at handoff write time. Background task `bir3v2d4j`. Output at `/tmp/tsla-precache.log`. ETA ~5–8 min. Result will land in `data/TSLA/`. Audit row will append to `scripts/precache_audit.md`.
+- 🟡 **AAPL, PLTR, AMD pre-flight green but NOT shipped tonight** — uploader trust signals ambiguous:
+  - AAPL → Benzinga repost (probable repost of real call, not official channel)
+  - PLTR → "Palantir Vision" (looks like fan channel, not issuer)
+  - AMD → "EARNMOAR" (unknown uploader, raises AI-summary risk)
+  - Decision: human eyeball the candidate URLs in `precache_audit.md` before spending Vertex/Speechmatics credits.
+
+## Day-3 Adversarial observation worth keeping
+
+End-to-end dashboard reads the SAME `data/NVDA/reconciliation.json` we built Day 2. No re-shaping needed. The reconciler's pre-sort by `materiality_score` descending means the Recharts bar chart can just iterate the array. The `uncited_claims_flag` is a chip on the card. Everything wires straight through — designs that lock the data contract up front pay off when the UI gets built last.
+
+## Adversarial observation worth keeping (Day 2)
 
 ## Day-2 progress so far
 
@@ -17,13 +57,118 @@ Last updated: 2026-05-17 (Day 2 complete — all 7 agents shipped + graph + CLI 
 - ✅ Frontend live on Vultr: http://80.240.26.175 (Next.js 16 + nginx + systemd unit).
 - ✅ GitHub repo polish for judging: LICENSE (MIT), README rewrite, 17 topics, homepage set, footer with attribution.
 
-## Adversarial observation worth keeping
+## Adversarial observation worth keeping (Day 2)
 
 On NVDA the bull and bear cite **non-overlapping** evidence (bull leans on
 C-claims around forward momentum; bear leans on F-claims around H20
 export controls + gross-margin compression). That's the design working:
 each agent picks its strongest evidence and the reconciler will
 materialise the disagreements as DisputedFacts.
+
+---
+
+## Day-4 critical path (next session, in order)
+
+Plan locked end of Day-3.5. Phases 1, 4, 6 parallel-safe; Phase 2 blocks
+Phase 3; Phase 3 blocks 5 + 7; Phase 7 blocks 8; Phase 8 blocks the
+demo video.
+
+| # | Phase | Goal | Files | Estimate |
+|---|-------|------|-------|----------|
+| 1 | Finish precache | Get TSLA confirmed + run AAPL/PLTR/AMD only after eyeballing uploader URLs from `scripts/precache_audit.md`. Re-rsync `data/{T}/` to `/srv/diligence/data/`. | `scripts/precache.py`, `data/{T}/`, Vultr | 30 min |
+| 2 | Ingest-aware POST + per-ticker lock + richer SSE | `_run_full_pipeline_bg` replaces `_run_graph_bg`; pre-flight on `data/T/manifest.json`, run `services.ingest.run_for_ticker` via `asyncio.to_thread` if missing; emit `edgar_fetched`, `fmp_fetched`, `audio_downloaded`, `transcript_ready` before agent events; `_TICKER_LOCKS` to dedupe; `_RUN_EVENTS_LOG` so reconnecting SSE replays history. New `GET /api/tickers` lists cached set. | `backend/api.py` | 1.5 h |
+| 3 | Ticker selector UI | `frontend/app/components/TickerLauncher.js` (chips + form `^[A-Za-z0-9]{1,6}$`); `ProgressModal.js` binds `EventSource(/api/research/T/stream)`; `router.push('/research/T')` on done. Hero CTA replaced. | `frontend/app/components/*`, `Hero.js` | 1.5 h |
+| 4 | Methodology page | `frontend/app/methodology/page.js` (server component, static). Pipeline diagram + source table + model table + confidence-band explainer + GitHub link. Wire Hero "How it works" → `/methodology`. | `frontend/app/methodology/*`, `Hero.js` | 45 min |
+| 5 | 404 / error UX | `frontend/app/research/[ticker]/not-found.js` with "run the pipeline" CTA firing POST. Dashboard inline retry instead of `notFound()`. | `frontend/app/research/[ticker]/*` | 30 min |
+| 6 | Provenance surfacing (frontend) | TranscriptPlayer header renders `manifest.sources.audio.{url,uploader,duration_seconds}`. AuditTab renders `manifest.sources.{10k,10q}.url`. | `TranscriptPlayer.js`, `AuditTab.js` | 30 min |
+| 7 | Rate limit | In-memory IP deque (3 POSTs/h), nginx `limit_req_zone` on POST only. Skip ingest entirely on cached hit. | `backend/api.py`, nginx | 30 min |
+| 8 | E2E smoke + adversarial review | Test matrix: chip-cached, form-cached, form-cold, form-invalid, direct unknown URL, spam, concurrent. `cavecrew-reviewer` on full diff. | (test only) | 45 min |
+| 9 | Demo video | 180-second script (landing → chip → dashboard → click bar → transcript word → fresh ticker via form → modal → new dashboard). | (external) | 60 min |
+
+**Day-4 budget: ~7 h focused + ~25 min compute + ~$4.**
+
+## External research items (resolve in first 15 min of Day-4)
+
+1. **Speechmatics chunking** — confirm json-v2 transcribes 70-min audio in one job. AAPL ~70 min. If 60-min ceiling, split via `ffmpeg -ss/-t` and merge transcripts on `start_time` offset.
+2. **Featherless concurrent caps on flat plan** — `/v1/chat/completions` may reject parallel POSTs above N. Bull+bear fan-out works for NVDA. Precache running 4 tickers in parallel might not. Sequential per-ticker for precache, parallel only inside one ticker.
+3. **FMP free-tier daily quota** — 250 calls/day historically. Precache uses ~5; agent-graph doesn't hit FMP. Confirm on FMP portal.
+4. **yt-dlp uploader rubric** — document acceptable channels per confidence band in `docs/AUDIO_SOURCING.md`. Official issuer channel = high; aggregator (Yahoo/Benzinga/CNBC) = medium; unknown uploader = `unverified_audio`.
+5. **Audio fallback path** — for tickers without a YouTube call, stretch `services/audio.py:fetch_from_ir_page(ticker, url)` that accepts a manual IR-page MP3 URL.
+
+## Infrastructure improvements (post-submission polish, ranked by ROI)
+
+1. **Postgres `agent_outputs(ticker, run_id, agent_type, output_json, ts)`** — unlocks cross-ticker comparison + run history. ~2 h.
+2. **Cloudflare in front of Vultr** — free tier, masks IP, HTTPS, edge cache `/_next/static/`. ~30 min after a domain is bought.
+3. **Caching headers on `/api/research/{T}`** — reconciliation is immutable once written. `ETag` + `Cache-Control: max-age=300`. Saves repeat SSR cost. ~15 min.
+4. **Source MP3 transcoding to 64 kbps mono Opus on ingest** — 1/5 the disk, 1/5 the upload. Speechmatics doesn't need 320 kbps. ~30 min.
+5. **Vultr Object Storage for audio** — frees the 128 GB SSD, signed URLs from FastAPI, CDN edge. $5/mo. ~45 min.
+6. **Replace Featherless Qwen with GPT-5.4 Mini or Claude Haiku 4.5** — closed-model adversarial agents might produce sharper bull/bear pillars. ~$0.05/ticker. A/B before committing.
+7. **`services/audio.py:fetch_from_ir_page()` fallback** — accept manual MP3 upload for tickers without YouTube. Implicit today via file-exists check; missing UI affordance.
+8. **Vector search across all `Claim.text`** — pgvector + sentence-transformers. "Find every NVDA + AMD claim about export controls." Premature for hackathon but compelling for a real product.
+9. **Observability** — uvicorn structured-logging + uptime-kuma on the Vultr box. ~1 h.
+10. **TestPyPI release of `agents/` as a library** — package the multi-agent loop as a CLI. Demo-after-demo opportunity.
+11. **Cross-quarter delta** — once two quarters cached for one ticker, the reconciler can diff disputed facts across time ("the bear case was right last quarter, here's what changed").
+
+## Next-session resume prompt (paste into a fresh Claude session)
+
+```
+Day-4 build on Diligence. Read HANDOFF.md first. The Day-3 dashboard is
+live at http://80.240.26.175/research/NVDA. Day-3.5 added manifest
+provenance + scripts/precache.py + a TSLA cache.
+
+First-thing checks:
+
+  ls data/TSLA/reconciliation.json   # confirm TSLA precache landed
+  cat scripts/precache_audit.md      # eyeball uploader URLs
+  git status                         # Day-3.5 work uncommitted at handoff
+                                     #   — audit diff, then commit + push
+
+Auth verification (always):
+
+  cd ~/diligence && source .venv/bin/activate
+  gcloud config configurations activate hackathon
+  python -c "from vertex_client import get_client; c = get_client(); print(c.models.generate_content(model='gemini-2.5-flash', contents='Reply OK').text)"
+
+Critical path (locked in HANDOFF.md "Day-4 critical path" table):
+
+  1. Decide on AAPL / PLTR / AMD by hand-eyeballing uploader URLs in
+     scripts/precache_audit.md. Run `python -m scripts.precache TICKER
+     --yes` for green ones. rsync data/{T}/ → /srv/diligence/data/.
+  2. Make POST /api/research/{T} run services.ingest if data/{T}/ is
+     missing (asyncio.to_thread, per-ticker asyncio.Lock,
+     ingest-stage SSE events, _RUN_EVENTS_LOG replay).
+  3. Frontend TickerLauncher (chips + form) + ProgressModal binding
+     EventSource. Replace Hero CTA. New /methodology page wired from
+     "How it works".
+  4. 404 UX on /research/UNKNOWN, rate limit + nginx limit_req_zone,
+     provenance rendering in TranscriptPlayer/AuditTab from
+     manifest.sources.
+  5. E2E smoke (chip cached / form cached / form cold / form invalid /
+     direct unknown URL / spam / concurrent same ticker). Adversarial
+     review via cavecrew-reviewer on the full diff.
+  6. Demo video only after step 5 is fully green.
+
+External research in the first 15 min before writing code (see HANDOFF
+"External research items"): Speechmatics chunking ceiling, Featherless
+concurrent caps, FMP daily quota, uploader trust rubric.
+
+Hard rules unchanged:
+
+  - gcloud auth application-default login → NEVER (RobotBoy ADC)
+  - git add -A or . → NEVER (stage specific paths)
+  - httpx + httpcore INFO muted in every new module
+  - AskUserQuestion dropdowns broken in Mirel's UI — ask in prose
+  - google-genai 2.3 GC race: bind client to a variable before calling
+    .models.generate_content(...). One-liner triggers crash.
+
+Vultr SSH: ssh root@80.240.26.175. Deploy snippet in HANDOFF.md.
+
+Caveman mode persistent across sessions (SessionStart hook).
+```
+
+---
+
+## Day-3 history (preserved)
 
 ## Next session = backend + dashboard (Day 3)
 
