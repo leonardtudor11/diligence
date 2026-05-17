@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { gsap } from "gsap";
 import { useGSAP } from "@gsap/react";
 import Image from "next/image";
+import TickerLauncher from "./TickerLauncher";
 import TickerLogos from "./TickerLogos";
 
 export default function Hero() {
@@ -58,20 +59,14 @@ export default function Hero() {
         Built for the analyst who skips the first eight hours.
       </p>
 
-      <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-        <a
-          href="/research/NVDA"
-          className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-transparent bg-accent px-6 font-mono text-sm font-semibold tracking-wide text-background transition-all duration-200 hover:brightness-110 cursor-pointer sm:w-48"
-        >
-          See the demo
-        </a>
-        <a
-          href="#how"
-          className="hero-cta box-border inline-flex h-12 w-64 max-w-full items-center justify-center rounded-md border border-border/60 bg-secondary/30 px-6 font-mono text-sm font-semibold tracking-wide text-foreground/90 transition-colors duration-200 hover:bg-secondary/60 cursor-pointer sm:w-48"
-        >
-          How it works
-        </a>
-      </div>
+      <TickerLauncher />
+
+      <a
+        href="#how"
+        className="hero-cta mt-4 box-border inline-flex h-10 items-center justify-center rounded-md border border-border/60 bg-secondary/30 px-5 font-mono text-xs uppercase tracking-[0.25em] text-foreground/70 transition-colors duration-200 hover:bg-secondary/60 hover:text-foreground"
+      >
+        How it works ↓
+      </a>
 
       <div className="hero-strip mt-12 w-full max-w-6xl">
         <p className="mb-3 text-center font-mono text-[10px] uppercase tracking-[0.4em] text-foreground/40">
