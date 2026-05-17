@@ -22,6 +22,10 @@ export default function SplineChartsDemo() {
 
   useEffect(() => {
     if (!ref.current || active) return;
+    // Generous rootMargin so the scene preloads while the user is still
+    // 1200px above. Below ~400px the section flashes empty during a
+    // demo scroll-through; above ~1500px it starts loading before the
+    // user even sees the BullBearSplit, which defeats the lazy purpose.
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -32,7 +36,7 @@ export default function SplineChartsDemo() {
           }
         }
       },
-      { rootMargin: "200px 0px" }
+      { rootMargin: "1200px 0px" }
     );
     io.observe(ref.current);
     return () => io.disconnect();
