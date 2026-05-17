@@ -80,11 +80,27 @@ AGENT_FILES: dict[str, str] = {
 
 app = FastAPI(title="Diligence API", version="0.1.0")
 
-# CORS — frontend served from same origin in prod (nginx), but allow
-# everything in dev so `next dev` on :3000 can call :8000 directly.
+# CORS — origin allowlist. `*` was a CSRF + spend-abuse vector: any site
+# could POST /api/research/{T} and burn the user's Gemini quota. The
+# DILIGENCE_CORS_ORIGINS env var is a comma-separated list; default to
+# the production demo URL + local dev hosts. allow_credentials is left
+# False (no cookie-bearing requests on this API) so the allowlist also
+# blocks credentialed reads.
+_DEFAULT_ALLOWED_ORIGINS = [
+    "http://80.240.26.175",
+    "https://80.240.26.175",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+_origins_env = os.environ.get("DILIGENCE_CORS_ORIGINS", "")
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _origins_env.split(",") if o.strip()]
+    if _origins_env
+    else _DEFAULT_ALLOWED_ORIGINS
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -118,12 +134,20 @@ _POST_HISTORY: dict[str, "collections.deque[float]"] = collections.defaultdict(
 
 
 async def _emit(run_id: str, payload: dict) -> None:
-    """Append an event to the replay log and the live queue (if open)."""
-    msg = json.dumps(payload)
-    _RUN_EVENTS_LOG.setdefault(run_id, []).append(msg)
+    """Append an event to the replay log and the live queue (if open).
+
+    Each event is wrapped with a monotonic per-run sequence number so an
+    SSE connection that replays the log and then tails the queue can
+    drop tail items whose seq is already in the replay (otherwise the
+    same event gets yielded twice — once from log, once from queue).
+    """
+    log_ref = _RUN_EVENTS_LOG.setdefault(run_id, [])
+    seq = len(log_ref)  # monotonic per run; same coroutine = no race
+    item = {"seq": seq, "msg": json.dumps(payload)}
+    log_ref.append(item)
     q = _RUN_QUEUES.get(run_id)
     if q is not None:
-        await q.put(msg)
+        await q.put(item)
 
 
 # How long to keep finished-run replay logs + metadata before pruning.
@@ -162,33 +186,66 @@ def _now_monotonic() -> float:
 
 
 def _client_ip(request: Request) -> str:
-    """Resolve the client IP, honouring the trusted nginx X-Forwarded-For
-    header. We assume a single trusted upstream so taking the first hop
-    is safe; in a multi-hop setup this would need a configurable trust
-    list.
+    """Resolve the client IP.
+
+    Trust order:
+      1. ``X-Real-IP`` set by nginx (`proxy_set_header X-Real-IP $remote_addr`).
+         nginx overwrites client-supplied values, so this is the safest
+         source when traffic comes through the canonical reverse proxy.
+      2. The *last* entry of ``X-Forwarded-For`` — nginx appends the real
+         client IP to whatever the client sent via `$proxy_add_x_forwarded_for`,
+         so the rightmost hop is the trusted one. Reading the leftmost
+         was a rate-limit bypass: a client could send any value and own
+         a unique bucket.
+      3. ``request.client.host`` as a last resort (direct connection).
+
+    WARNING: if uvicorn is ever reachable without nginx in front, the
+    X-* headers are arbitrarily forgeable. Bind uvicorn to 127.0.0.1
+    only (matches the systemd unit).
     """
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        return fwd.split(",")[0].strip()
+        parts = [p.strip() for p in fwd.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     if request.client is not None:
         return request.client.host
     return "unknown"
 
 
-def _rate_limit_check(ip: str) -> tuple[bool, int]:
-    """Returns (allowed, retry_after_seconds). Stateful — call once per
-    POST that *would* trigger a cold ingest, and skip for cached hits."""
+def _rate_limit_peek(ip: str) -> tuple[bool, int]:
+    """Returns (allowed, retry_after_seconds) WITHOUT consuming a slot.
+
+    Use this in the POST handler to reject a request early; the slot
+    is only consumed after the bg task confirms a cold ingest is
+    actually starting (see ``_rate_limit_consume``). Otherwise two
+    concurrent POSTs for the same ticker both pass the peek, only one
+    runs ingest, but both slots are debited — burning the user's quota
+    on phantom work.
+    """
     import time as _time
     now = _time.monotonic()
     dq = _POST_HISTORY[ip]
     cutoff = now - RATE_LIMIT_WINDOW_S
     while dq and dq[0] < cutoff:
         dq.popleft()
+    if not dq:
+        _POST_HISTORY.pop(ip, None)  # release empty deques to bound memory
+        return True, 0
     if len(dq) >= RATE_LIMIT_BURST:
         retry = max(1, int(dq[0] + RATE_LIMIT_WINDOW_S - now))
         return False, retry
-    dq.append(now)
     return True, 0
+
+
+def _rate_limit_consume(ip: str) -> None:
+    """Append a timestamp to the per-IP deque. Called from inside the
+    per-ticker lock once a cold ingest is confirmed to start."""
+    import time as _time
+    _POST_HISTORY[ip].append(_time.monotonic())
 
 
 def _ticker_dir(ticker: str) -> Path:
@@ -318,10 +375,14 @@ async def start_research(
     td = _ticker_dir(ticker)
     full_cache = (td / "reconciliation.json").exists() and not force
     _purge_old_runs()
+    ip = _client_ip(request)
 
     if not full_cache:
-        ip = _client_ip(request)
-        allowed, retry_after = _rate_limit_check(ip)
+        # Peek the rate limit but do NOT consume a slot yet — concurrent
+        # POSTs for the same ticker can both pass the peek, but only one
+        # actually starts ingest inside the lock. The bg coroutine
+        # consumes the slot atomically after confirming need_ingest=True.
+        allowed, retry_after = _rate_limit_peek(ip)
         if not allowed:
             raise HTTPException(
                 status_code=429,
@@ -352,6 +413,7 @@ async def start_research(
         ticker.upper(),
         effective_reuse_cache,
         force,
+        ip,
     )
     return {
         "run_id": run_id,
@@ -365,6 +427,7 @@ async def _run_full_pipeline_bg(
     ticker: str,
     reuse_cache: bool,
     force: bool,
+    ip: str,
 ) -> None:
     """Background coroutine: optional ingest + agent graph, streamed via SSE.
 
@@ -372,6 +435,10 @@ async def _run_full_pipeline_bg(
     ticker so two judges hitting "Run NVDA" don't both pay for ingest /
     agents. The second caller's queue still gets events emitted via the
     replay log when the lock releases.
+
+    Rate-limit slot is consumed inside the lock once we've confirmed a
+    cold ingest is actually starting — prevents two concurrent POSTs for
+    the same ticker from debiting two slots when only one will spend.
     """
     meta = _RUN_META[run_id]
     lock = _TICKER_LOCKS[ticker]
@@ -383,6 +450,19 @@ async def _run_full_pipeline_bg(
             manifest_path = td / "manifest.json"
             need_ingest = force or not manifest_path.exists()
             if need_ingest:
+                # Confirm and consume the rate-limit slot now.
+                allowed, retry_after = _rate_limit_peek(ip)
+                if not allowed:
+                    await _emit(run_id, {
+                        "event": "error",
+                        "error": f"Rate limit reached during queued ingest. "
+                                 f"Retry in ~{retry_after}s.",
+                    })
+                    meta["status"] = "error"
+                    meta["error"] = "rate_limited"
+                    meta["_finished_at"] = _now_monotonic()
+                    return
+                _rate_limit_consume(ip)
                 await _emit(run_id, {"event": "ingest_start", "ticker": ticker})
                 # Lazy import — keeps server bootstrap free of yt-dlp /
                 # google-genai weight when serving cached data.
@@ -444,15 +524,31 @@ async def stream_research(
     Replays every event already in ``_RUN_EVENTS_LOG[run_id]`` before
     tailing the live queue, so a reconnect (or a slow ProgressModal
     mount) doesn't miss the start / ingest_done events.
+
+    Validates ticker format and confirms the run_id actually belongs
+    to this ticker — otherwise the path parameter was being ignored
+    entirely, which let any ticker string in the URL collect SSE for
+    any valid run_id.
     """
+    _ticker_dir(ticker)  # raises 400 on malformed ticker
     if run_id not in _RUN_META:
         raise HTTPException(status_code=404, detail=f"unknown run_id {run_id}")
+    if _RUN_META[run_id].get("ticker") != ticker.upper():
+        raise HTTPException(
+            status_code=404,
+            detail=f"run_id {run_id} does not belong to ticker {ticker.upper()}",
+        )
 
     async def gen():
-        # Replay first. This is non-blocking and bounded by the run's
-        # event count — typically <20 lines for a full pipeline.
-        for past in _RUN_EVENTS_LOG.get(run_id, []):
-            yield f"data: {past}\n\n"
+        # Replay first. Snapshot the log (list copy) so concurrent _emit
+        # writes don't extend our iteration. Track the highest seq we've
+        # yielded so the queue-tail can skip already-yielded items.
+        replayed = list(_RUN_EVENTS_LOG.get(run_id, []))
+        max_seq = -1
+        for past in replayed:
+            yield f"data: {past['msg']}\n\n"
+            if past["seq"] > max_seq:
+                max_seq = past["seq"]
 
         # If the run terminated before this client connected, the queue
         # is gone — the replay above is all there is.
@@ -472,7 +568,13 @@ async def stream_research(
                     continue
                 if item is None:
                     return
-                yield f"data: {item}\n\n"
+                # Drop tail items that the replay already covered.
+                if isinstance(item, dict) and item.get("seq", -1) <= max_seq:
+                    continue
+                payload = item["msg"] if isinstance(item, dict) else item
+                yield f"data: {payload}\n\n"
+                if isinstance(item, dict) and item.get("seq", -1) > max_seq:
+                    max_seq = item["seq"]
         finally:
             # Tidy up the queue once this client disconnects. Keep the
             # terminal status in _RUN_META + the replay log so a

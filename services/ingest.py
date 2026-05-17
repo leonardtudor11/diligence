@@ -53,8 +53,17 @@ log = logging.getLogger("ingest")
 
 
 def _write_json(path: Path, payload: Any) -> None:
+    """Atomically write `payload` as JSON to `path`.
+
+    Writes to a sibling tempfile then os.replace — partial writes from
+    a SIGTERM mid-write would otherwise corrupt manifest.json and
+    poison every subsequent ``get_research`` call with JSONDecodeError.
+    """
+    import os
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, default=str))
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, default=str))
+    os.replace(tmp, path)
 
 
 def _now_iso() -> str:

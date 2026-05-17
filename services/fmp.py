@@ -39,7 +39,14 @@ def _get(endpoint: str, **params: Any) -> list | dict:
             raise FundamentalsUnavailable(
                 f"FMP {endpoint!r} rate-limited (429). Free tier = 250 calls/day."
             )
-        r.raise_for_status()
+        # raise_for_status() puts the full request URL — including the
+        # apikey query param — into the exception message, which would
+        # leak the key into systemd journal via logger.exception. Catch
+        # any other 4xx/5xx and re-raise with the URL stripped.
+        if r.status_code >= 400:
+            raise FundamentalsUnavailable(
+                f"FMP {endpoint!r} HTTP {r.status_code}"
+            )
         return r.json()
 
 

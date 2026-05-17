@@ -49,6 +49,17 @@ DATA = ROOT / "data"
 MIN_AUDIO_BYTES = 1_000_000  # 1 MB floor — anything smaller is a failed fetch
 MIN_CANDIDATE_SCORE = 50
 DEFAULT_CANDIDATES_PER_QUERY = 8
+# Wall-clock cap on any single yt-dlp invocation. Without this, a hung
+# YouTube response would pin one thread-pool worker forever and
+# eventually exhaust uvicorn's `asyncio.to_thread` pool.
+YT_DLP_PROBE_TIMEOUT_S = 120
+YT_DLP_DOWNLOAD_TIMEOUT_S = 600
+# Only download from these hosts. Defence-in-depth against a poisoned
+# yt-dlp result or future caller error: if `webpage_url` resolves to
+# anything else, refuse rather than handing yt-dlp an arbitrary URL.
+ALLOWED_AUDIO_HOSTS = frozenset({
+    "www.youtube.com", "youtube.com", "youtu.be", "m.youtube.com",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -286,28 +297,52 @@ def _yt_dlp_probe(
     *,
     min_duration_seconds: int = 1200,
 ) -> list[dict]:
-    """Return up to n yt-dlp candidate dicts for one query. Empty on failure."""
+    """Return up to n yt-dlp candidate dicts for one query. Empty on failure.
+
+    Uses ``--dump-json`` (one JSON object per line) instead of a custom
+    ``--print`` template. The previous template used ``%(uploader)j``
+    which is yt-dlp's *shell*-escape format, not JSON-escape — uploaders
+    or titles with apostrophes or quotes silently failed json.loads and
+    the candidate was dropped. --dump-json emits proper JSON.
+
+    Bounded by YT_DLP_PROBE_TIMEOUT_S so a hung YouTube response cannot
+    pin a thread-pool worker. ``--ignore-config`` prevents per-user
+    yt-dlp configs from injecting proxies / plugins / extra args.
+    """
     _need("yt-dlp")
     cmd = [
         "yt-dlp",
+        "--ignore-config",
         "--simulate",
         "--no-playlist",
+        "--no-cache-dir",
         "--match-filter", f"duration > {min_duration_seconds}",
-        "--print",
-        '{"url":%(webpage_url)j,"uploader":%(uploader)j,'
-        '"channel":%(channel)j,"title":%(title)j,'
-        '"duration_seconds":%(duration)j,"upload_date":%(upload_date)j}',
+        "--dump-json",
         f"ytsearch{n}:{query}",
     ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True,
+            timeout=YT_DLP_PROBE_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return []
     if result.returncode != 0:
         return []
     out: list[dict] = []
     for line in result.stdout.strip().splitlines():
         try:
-            out.append(json.loads(line))
+            full = json.loads(line)
         except json.JSONDecodeError:
             continue
+        out.append({
+            "url": full.get("webpage_url"),
+            "uploader": full.get("uploader"),
+            "channel": full.get("channel"),
+            "title": full.get("title"),
+            "duration_seconds": full.get("duration"),
+            "upload_date": full.get("upload_date"),
+        })
     return out
 
 
@@ -407,21 +442,51 @@ def find_best_audio_candidate(
 
 
 def download_audio_by_url(url: str, out_path: Path) -> Path:
-    """Download a specific YouTube URL to ``out_path`` as MP3. Idempotent."""
+    """Download a specific YouTube URL to ``out_path`` as MP3. Idempotent.
+
+    Enforces ``ALLOWED_AUDIO_HOSTS`` — refuses to download from anything
+    that isn't a known YouTube hostname. Defence-in-depth against a
+    poisoned candidate URL (or a future caller passing user input):
+    without this, yt-dlp would happily fetch from the cloud-metadata
+    service or any internal HTTP endpoint via its generic extractor.
+
+    Wall-clock cap via YT_DLP_DOWNLOAD_TIMEOUT_S.
+    """
+    from urllib.parse import urlparse
     _need("yt-dlp")
     _need("ffmpeg")
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise AudioNotAvailable(
+            f"refusing non-https audio URL (scheme={parsed.scheme!r})"
+        )
+    if parsed.hostname not in ALLOWED_AUDIO_HOSTS:
+        raise AudioNotAvailable(
+            f"refusing audio host {parsed.hostname!r} (allowed: "
+            f"{sorted(ALLOWED_AUDIO_HOSTS)})"
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if out_path.exists() and out_path.stat().st_size > MIN_AUDIO_BYTES:
         return out_path
     cmd = [
         "yt-dlp",
+        "--ignore-config",
+        "--no-cache-dir",
         "-x", "--audio-format", "mp3",
         "--audio-quality", "0",
         "--no-playlist",
         "-o", str(out_path.with_suffix(".%(ext)s")),
         url,
     ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True,
+            timeout=YT_DLP_DOWNLOAD_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise AudioNotAvailable(
+            f"yt-dlp download exceeded {YT_DLP_DOWNLOAD_TIMEOUT_S}s wall clock"
+        )
     if result.returncode != 0:
         stderr_last = (result.stderr or "").strip().splitlines()
         hint = stderr_last[-1] if stderr_last else "(no stderr)"
