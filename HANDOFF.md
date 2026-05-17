@@ -1,72 +1,106 @@
 # Handoff — read this at the start of every new Claude session
 
-Last updated: 2026-05-17 evening (Day-5 UI revamp in progress on branch `revamp/day5-ui` — NOT merged to main yet; Vultr still on `main`/`609cb63`).
+Last updated: 2026-05-17 night (Day-5 UI revamp **COMPLETE + DEPLOYED**: `main` and Vultr both at `2173d6f`. Sessions 1–6 of `revamp/day5-ui` merged + pushed + smoke-verified on live).
 
-## Day-5 UI/UX revamp (branch `revamp/day5-ui`)
+## Day-5 UI revamp — DONE
 
-Adversarial 3-prong pass: Playwright screenshot capture, Claude general-purpose UI/UX critique agent (26 findings + 5 demo-blockers), and a Codex CLI adversarial review that was launched but hung in the gpt-5-codex reasoning phase at 52m elapsed (cancelled — no findings returned beyond the file-reading phase). Findings dossier at `/tmp/diligence-uxaudit/ux-findings.md`. Codex hang appears to be a known issue with large-context reviews; revisit only if a future session has time to budget 60+ min for a single review.
+`revamp/day5-ui` (kept as a traceable branch, not deleted) was fast-forwarded into `main` after Session 6 audit passed. Vultr fast-forwarded + rebuilt + restart `diligence-frontend`. Backend untouched (no API changes).
 
-### Commits on `revamp/day5-ui`
+### Full commit timeline on `main`
+
+Pre-session demo-blocker batch (already on main before session split started):
 
 - `6e61631` revamp/day5: demo-blocker fixes + chart palette (commit 1/N)
 - `680c018` revamp/day5: bump SplineChartsDemo rootMargin to 1200px
-- (one more incoming with the ZZZZZ UX fix + HANDOFF update)
+- `fa752da` revamp/day5: junk-ticker UX single-click + HANDOFF doc
 
-### What changed visually
+Session-split work (all merged FF into main as a block, original commits preserved):
 
-- **DisputedFactsChart full repaint** (`frontend/app/research/[ticker]/DisputedFactsChart.js`). New palette ties the dashboard back to the landing-page Spline 3D-charts surface: bright emerald gradient on the focused row, magenta→purple gradient for materiality ≥8, violet for 5-7, muted slate for low. SVG gaussian-blur glow on the active bar. Deferred mount via `useState`+`useEffect` so Recharts' ResponsiveContainer has actual offsetWidth/offsetHeight to measure — eliminates the `width(-1) height(-1)` flash on dashboard load.
-- **BullBearSplit blank-pre-scroll fix** (`frontend/app/components/BullBearSplit.js`). `gsap.set` was parking animals offscreen at mount BEFORE ScrollTrigger fired, section was black for ~600ms. Moved initial state into `tl.set` so animals stay visible until the trigger actually fires.
-- **SplineChartsDemo lazy-mount** (`frontend/app/components/SplineChartsDemo.js`). IntersectionObserver with 1200px rootMargin defers the second WebGL scene; cuts the initial-paint ReadPixels stalls in half.
-- **Dashboard top-bar grid layout** (`frontend/app/research/[ticker]/Dashboard.js`). Was flex-wrap — badges floated detached from H1 on desktop and orphaned on mobile. Now `grid-cols-1 lg:grid-cols-[1fr_auto]` so badges land cleanly under the title at <lg and tucked right at ≥lg.
-- **NotIngestedYet junk-ticker guard** (`frontend/app/research/[ticker]/NotIngestedYet.js`). `JUNK_RE` heuristic for placeholder tickers (ZZZZZ, XXXXX, TEST, AAAA, all-same-character). Persistent amber "Run anyway" button + warning instead of the previous green "Run diligence" that would happily spend on garbage input.
-- **PillarColumn claim-chip excerpts** (`frontend/app/research/[ticker]/PillarColumn.js`). Chips now render `F-001 · "Revenue grew 32%…"` instead of bare `F-001`. Judges in a 3-minute demo recording don't hover for tooltips.
-- **Confidence-downgrade banner contrast** (`Dashboard.js`). Eyebrow `text-yellow-300/80` → `text-yellow-200` (was failing WCAG AA at ~3.2:1).
-- **ProgressModal active-step polish** (`frontend/app/components/ProgressModal.js`). Pulsing dot is now accent-green with halo instead of muted gray.
-- **globals.css palette extension**: added `--accent-bright`, `--accent-deep`, `--materia`, `--materia-bright`, `--materia-deep` with matching Tailwind 4 `@theme inline` aliases.
-- **SampleDisputedFact copy honesty** (`SampleDisputedFact.js`). Removed the stale "Live runs ship once the agent layer is wired" line; agents have been live since Day-2.
+- `b8f4f06` revamp/day5: session 1 — hero alignment fix
+- `56e06a4` revamp/day5: session 2 — permalink to disputed fact via `?fact=N`
+- `af47e77` revamp/day5: session 3 — per-claim confidence + accounting badges
+- `10fdc50` revamp/day5: session 4 — claim chip → transcript seek / SEC URL
+- `cf1ac68` revamp/day5: session 5 — dashboard-wide citation interactivity
+- `2173d6f` revamp/day5: session 6 — audit candidates table polish
 
-### Rollback path (if revamp fails the demo)
+### Session-by-session audit results (Playwright on live `http://80.240.26.175`)
 
-```bash
-# On the Vultr box, you don't need to do anything — main is unchanged
-# and that's what's deployed. Just keep main as-is.
-ssh root@80.240.26.175 'cd /srv/diligence && git status && git rev-parse HEAD'
-# expected: clean, HEAD == 609cb63
+| Session | Headline | Key audit signal (PLTR, desktop / mobile) |
+|---|---|---|
+| 1 | Hero alignment | visual only — no functional probe |
+| 2 | `?fact=N` permalink | url replace + initial state hydration green |
+| 3 | Per-claim ⚠/§ badges | yellow ring on `unverified_audio`, amber ring on `accounting_flag` |
+| 4 | Chip → seek / SEC URL | 16 seek + 16 filing chips; click → scroll +2274px, clock advances 0→0:05 in 3.5s; filing popup → sec.gov |
+| 5 | Dashboard-wide citation buttons | 42 seek + 41 filing actionable buttons (2.6× S4); inline `(F-007)` tokens AND `DisputedFactCard` chip strip both wired |
+| 6 | Audit candidates table polish | `<details>` open by default; T1/T3/T4 coloured pills; winner ✓; score mini-bar; mobile horizontal-scroll wrapper (sw 754 / cw 308) |
 
-# Local rollback (delete revamp branch if you want it gone):
-git checkout main
-git branch -D revamp/day5-ui
+Live re-verification (capture_s5_live.py + capture_s6_live.py vs `http://80.240.26.175`) reproduced every signal at 1440×900 + 390×844 — 0 console errors, 0 pageerrors.
 
-# Local rollback (keep revamp branch, just go back to main):
-git checkout main
-```
+### Pre-session-split revamp work (kept here for context — unchanged details)
 
-### Promotion path (if revamp passes review)
+- **DisputedFactsChart full repaint** (`frontend/app/research/[ticker]/DisputedFactsChart.js`). New palette ties dashboard back to landing-page Spline 3D-charts surface: bright emerald gradient on focused row, magenta→purple for materiality ≥8, violet for 5-7, muted slate for low. SVG gaussian-blur glow on active bar. Deferred mount via `useState`+`useEffect` so Recharts' ResponsiveContainer has real offsetWidth/offsetHeight — eliminates `width(-1) height(-1)` flash.
+- **BullBearSplit blank-pre-scroll fix** (`frontend/app/components/BullBearSplit.js`). Moved initial state into `tl.set` so animals stay visible until trigger fires.
+- **SplineChartsDemo lazy-mount** (`frontend/app/components/SplineChartsDemo.js`). IntersectionObserver 1200px rootMargin defers second WebGL scene; cuts initial-paint ReadPixels stalls in half.
+- **Dashboard top-bar grid layout**. `grid-cols-1 lg:grid-cols-[1fr_auto]` replaces flex-wrap.
+- **NotIngestedYet junk-ticker guard**. JUNK_RE heuristic + amber "Run anyway" replacing green "Run diligence" for ZZZZZ-style placeholders.
+- **PillarColumn claim-chip excerpts** (became foundation for Session 4 chip→seek wiring).
+- **Confidence-downgrade banner contrast**. Yellow eyebrow now `text-yellow-200` (was failing WCAG AA at 3.2:1).
+- **ProgressModal active-step polish**. Pulsing dot accent-green with halo.
+- **globals.css palette extension**: `--accent-bright`, `--accent-deep`, `--materia`, `--materia-bright`, `--materia-deep` + matching Tailwind 4 `@theme inline` aliases.
+- **SampleDisputedFact copy honesty**.
+
+### Rollback path (if Day-5 needs to be reverted post-demo)
 
 ```bash
 # Local
 git checkout main
-git merge --ff-only revamp/day5-ui
+git reset --hard 609cb63    # Day-4 final commit (last pre-revamp HEAD)
+git push --force-with-lease origin main
+
+# Vultr
+ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git fetch && sudo -u diligence git reset --hard origin/main && cd frontend && sudo -u diligence npm ci --no-audit --no-fund && sudo -u diligence npm run build && systemctl restart diligence-frontend'
+```
+
+`revamp/day5-ui` branch is preserved on origin + locally for diff inspection or cherry-pick of individual sessions. If only a single session needs to be undone, the per-session commit SHAs above are valid revert targets.
+
+### Promotion path — DONE (kept for future Day-N work)
+
+```bash
+# Local
+git checkout main
+git merge --ff-only <feature-branch>
 git push origin main
 
-# Vultr deploy
+# Vultr deploy (frontend only — no backend change)
 ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git pull --ff-only && cd frontend && sudo -u diligence npm ci --no-audit --no-fund && sudo -u diligence npm run build && systemctl restart diligence-frontend'
+```
+
+Known landmine: the Vultr `.git/objects/` tree must be owned by `diligence:diligence`. Earlier sessions occasionally ran `git pull` as root, which left a few subdirs root-owned and surfaced as `error: insufficient permission for adding an object` on the next `sudo -u diligence git pull`. Fix once with:
+
+```bash
+ssh root@80.240.26.175 'cd /srv/diligence && chown -R diligence:diligence .git'
 ```
 
 ### Day-5 verification artifacts
 
-- Pre-revamp screenshots: `/tmp/diligence-uxaudit/*.png` (31 PNGs of live Vultr `main` at the time of audit)
+- Pre-revamp screenshots: `/tmp/diligence-uxaudit/*.png`
 - Post-revamp screenshots: `/tmp/diligence-uxaudit/after/*.png`
+- Session-N captures: `/tmp/diligence-uxaudit/s{4,5,6}/*.png`
+- Live-Vultr captures: `/tmp/diligence-uxaudit/live/s{5,6}/*.png`
 - UI/UX findings dossier: `/tmp/diligence-uxaudit/ux-findings.md`
-- Playwright drivers: `/tmp/diligence-uxaudit/capture.py` + `capture_local.py` + `interact_local.py`
+- Playwright drivers: `capture.py`, `capture_local.py`, `interact_local.py`, `capture_s{4,5,6}.py`, `capture_s{5,6}_live.py`
 
-### Items deliberately not touched in Day-5 revamp
+### Items deliberately not touched (carried forward to Day-6 or post-submission polish)
 
-- **Codex backend tech-debt** (the 9 punted items from Day-4 + the SSE-reconnect MEDIUM from Codex 2026-05-17). Untouched because the Codex review hung before producing severity-ranked findings; merging them into the revamp branch would be guesswork. Leave for Day-6.
-- **Methodology page pipeline SVG diagram**. UI/UX agent flagged "100% text wall" but a quality SVG pipeline is ~3h of careful work and not demo-critical.
-- **Dashboard top-bar tab strip revamp**. Bigger structural change. The grid-layout fix already solves the overflow problem; the tab strip is polish.
-- **Agent-graph SVG replacing the Spline robot**. UI/UX agent's #1 revamp suggestion. Would replace the existing Spline scene wholesale — risky this close to demo.
-- **Hero subtitle compression / typography re-rank**. The Hero is already in a defensible state; further tuning is a coin flip.
+- **Codex backend tech-debt** — the 9 punted items from Day-4 + SSE-reconnect MEDIUM (full list under "Day-4 tech-debt punted" further down).
+- **Methodology page pipeline SVG diagram**. "100% text wall" finding from UI/UX dossier; quality SVG is ~3 h.
+- **Dashboard top-bar sticky 2-row tab strip**. Bigger structural change; the grid fix already solves overflow.
+- **Agent-graph SVG replacing the Spline robot**. Would replace existing Spline scene wholesale.
+- **Hero CTA hierarchy + mobile font wrap**. Already in defensible state; tuning is a coin flip.
+- **Live "now-playing claim" highlight while audio plays**. Requires lifting wavesurfer `currentTime` out of TranscriptPlayer + a claim-by-time index. Considered for Session 6 then bumped — sexy demo moment but complex.
+- **Transcript word `<span onClick>` → keyboard-accessible `<button>`**. A11y improvement; not demo-blocking.
+- **Touch-target sizing**: chips ~32px tall, under iOS 44px minimum. Mobile-tablet booth UX.
+- **Inline citation `(F-007)` actionability inside Pillar.reasoning** was completed in Session 5 (not punted).
 
 ---
 
@@ -162,18 +196,20 @@ Tried `npm install -g @openai/codex` to add a fourth adversarial-review angle. m
 
 **Next-session action if you want Codex back:** verify maintainers (`npm view @openai/codex maintainers`), then reinstall + manually allow via macOS Settings. Skip until post-demo.
 
-## Day-5 critical path (next session, in order)
+## Post-Day-5 critical path (next session)
+
+The UI revamp is shipped. Only the demo video + submission stand between the project and the lablab.ai entry.
 
 | # | Item | Estimate | Notes |
 |---|------|----------|-------|
-| 1 | First-thing checks | 5 min | `git status` (should be clean), `curl -s http://80.240.26.175/api/tickers \| jq` (should show NVDA + PLTR + TSLA), `git log --oneline -10` (`fd0c6da` at top), confirm Vultr `git pull` ran. |
-| 2 | OPTIONAL — NVDA re-ingest | 7 min + ~$0.40 | `ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence /srv/diligence/.venv/bin/python -m scripts.precache NVDA --yes'`. Updates NVDA manifest to new schema (tier badge + candidates table). EARNMOAR will likely stay T4. |
-| 3 | OPTIONAL — apply nginx limit_req_zone | 15 min | Paste contents of `deploy/nginx-snippet.conf` into `/etc/nginx/sites-enabled/diligence` (ABOVE `location /` catch-all). Add `limit_req_zone $binary_remote_addr zone=diligence_post:10m rate=6r/m;` into `/etc/nginx/nginx.conf` http block. `nginx -t` then `systemctl reload nginx`. |
-| 4 | OPTIONAL — Codex CLI revisit | 10 min | `npm view @openai/codex maintainers repository.url` to verify legit. If OK, reinstall + System Settings → "Allow Anyway" on the quarantined binary. Then `/codex:adversarial-review --base 4219f98` runs the fourth-angle pass. |
-| 5 | Phase 9 — demo video | 60 min | Script in "Demo video script" section below. Target 180 s. Cover: landing → click PLTR chip → ProgressModal flash → dashboard with T1 tier badge + audit candidates table → click bull/bear bars → click transcript word → seek audio → form input "MSFT" (cold path live demo, OR pre-record this) → ProgressModal live stepper → cut to dashboard. |
-| 6 | Hackathon submission | 30 min | Submit to lablab.ai Milan AI Week '26. Video link + GitHub link + http://80.240.26.175. README already polished. |
+| 1 | First-thing checks | 3 min | `git status` clean, `git log --oneline -5` → `2173d6f` at top, `curl -s http://80.240.26.175/api/tickers \| jq` → NVDA + PLTR + TSLA (PLTR T1 125, TSLA T1 135), `ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git rev-parse HEAD'` → `2173d6f`. |
+| 2 | **Phase 9 — demo video** | 60 min | Script in "Day-5 demo video script" section below. Target 180 s. The audit-tab beat (1:20–1:40) is now visually denser thanks to Session 6 — judge sees the winner ✓ + tier pills + score bars without a second click. |
+| 3 | Hackathon submission | 30 min | lablab.ai Milan AI Week '26. Video link + GitHub link + http://80.240.26.175. README already polished. |
+| 4 | OPTIONAL — NVDA re-ingest | 7 min + ~$0.40 | `ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence /srv/diligence/.venv/bin/python -m scripts.precache NVDA --yes'`. Updates NVDA manifest to the new schema (tier badge + candidates table). Without this NVDA stays Day-1-vintage (no candidates row on the dashboard). EARNMOAR will likely stay T4. |
+| 5 | OPTIONAL — apply nginx limit_req_zone | 15 min | Paste `deploy/nginx-snippet.conf` into `/etc/nginx/sites-enabled/diligence` (ABOVE `location /` catch-all). Add `limit_req_zone $binary_remote_addr zone=diligence_post:10m rate=6r/m;` into `/etc/nginx/nginx.conf` http block. `nginx -t` then `systemctl reload nginx`. |
+| 6 | OPTIONAL — Codex CLI revisit | 10 min | `npm view @openai/codex maintainers repository.url` to verify legit. If OK, reinstall + System Settings → "Allow Anyway" on the quarantined binary. Then `/codex:adversarial-review --base 609cb63` for fresh fourth-angle pass against the revamp. |
 
-**Day-5 budget: ~2-3 h focused if items 2-4 are skipped, ~4 h if all included.**
+**Budget: ~1.5 h focused if items 4-6 skipped, ~3 h if all included.**
 
 ## Day-5 demo video script (180 s rough)
 
@@ -190,24 +226,28 @@ Tried `npm install -g @openai/codex` to add a fourth adversarial-review angle. m
 
 ## Open punch list (not blocking demo)
 
-- [ ] Nginx limit_req_zone applied on Vultr (item 3 above)
-- [ ] NVDA re-ingest decision (item 2 above) — defaults to "leave Day-1 vintage"
-- [ ] Codex CLI verify + reinstall (item 4 above)
-- [ ] Phase 9 demo video (item 5 above) — only true blocker for submission
+- [ ] Phase 9 demo video — the only remaining blocker for hackathon submission
+- [ ] Hackathon submission on lablab.ai
+- [ ] Nginx limit_req_zone applied on Vultr (elective, item 5 in critical path)
+- [ ] NVDA re-ingest decision (elective, item 4 in critical path) — defaults to "leave Day-1 vintage"
+- [ ] Codex CLI verify + reinstall (elective, item 6)
+- [ ] Day-6 hardening pass on tech-debt items (see "Day-4 tech-debt punted" + "Items deliberately not touched" sections)
 
 ## Next-session resume prompt (paste into a fresh Claude session)
 
 ```
-Day-5 on Diligence. Read HANDOFF.md first — Day-4 is fully complete
-and pushed (13 commits, fd0c6da is HEAD). 8 of 9 phases done; only
-Phase 9 (demo video) and a few elective Vultr items remain.
+Post-Day-5 on Diligence. Read HANDOFF.md first — Day-5 UI revamp is
+COMPLETE + DEPLOYED. main is at 2173d6f. Sessions 1-6 of revamp/day5-ui
+merged + pushed + Vultr smoke-verified at http://80.240.26.175.
 
 First-thing checks:
 
-  git status                              # should be clean
-  git log --oneline -5                    # fd0c6da at top
+  git status                              # should be clean on main
+  git log --oneline -5                    # 2173d6f at top
   curl -s http://80.240.26.175/api/tickers | jq
-  # should show NVDA + PLTR + TSLA; PLTR audio_tier T1 score 125, TSLA T1 135.
+  # should show NVDA + PLTR + TSLA; PLTR T1 125, TSLA T1 135.
+  ssh root@80.240.26.175 'cd /srv/diligence && sudo -u diligence git rev-parse HEAD'
+  # expected: 2173d6f
 
 Auth verification (always):
 
@@ -215,19 +255,23 @@ Auth verification (always):
   gcloud config configurations activate hackathon
   python -c "from vertex_client import get_client; c = get_client(); print(c.models.generate_content(model='gemini-2.5-flash', contents='Reply OK').text)"
 
-Critical path (Day-5):
+Critical path:
 
-  1. Confirm Vultr is on fd0c6da; if not, run the deploy command
-     in HANDOFF.md "Vultr live state at handoff time".
-  2. OPTIONAL re-ingest NVDA (~$0.40, ~7 min) so its manifest gets
-     the new tier schema. Default: skip.
-  3. OPTIONAL paste deploy/nginx-snippet.conf into Vultr nginx config
-     (limit_req_zone + the regex location block). Default: skip.
-  4. OPTIONAL — verify @openai/codex maintainers on npm, reinstall +
-     allow via macOS System Settings if happy. Default: skip.
-  5. **Phase 9 demo video.** Script in HANDOFF.md "Day-5 demo video
-     script". Target 180 s.
-  6. Submit to lablab.ai Milan AI Week '26.
+  1. **Phase 9 demo video.** Script in HANDOFF.md "Day-5 demo video
+     script". Target 180 s. The audit-tab beat (1:20-1:40) is now
+     visually punchy thanks to Session 6 — candidates table open by
+     default, tier pills coloured, winner ✓ marker, score mini-bars.
+  2. Submit to lablab.ai Milan AI Week '26 (video link + GitHub link +
+     http://80.240.26.175).
+
+OPTIONAL (only if time permits, in priority order):
+
+  3. NVDA re-ingest (~$0.40, ~7 min) so its manifest gets the new
+     tier+candidates schema. EARNMOAR will likely stay T4.
+  4. nginx limit_req_zone on Vultr (deploy/nginx-snippet.conf).
+  5. @openai/codex CLI revisit; if reinstalled, run
+     /codex:adversarial-review --base 609cb63 for a fresh dismantle
+     pass against the Day-5 revamp.
 
 Hard rules unchanged:
 
@@ -237,16 +281,17 @@ Hard rules unchanged:
   - AskUserQuestion dropdowns broken in Mirel's UI — ask in prose
   - google-genai 2.3 GC race: bind client to a variable before calling
     .models.generate_content(...). One-liner triggers crash.
-  - For adversarial audits, use Codex (when reinstalled) + multiple
-    general-purpose Claude sub-agents in dismantle mode — NEVER the
-    compressed caveman-reviewer. (See feedback_adversarial_audits_full_force
-    memory.)
+  - For adversarial audits, use Codex + multiple general-purpose Claude
+    sub-agents in dismantle mode — NEVER the compressed cavecrew-reviewer.
 
-Tech-debt punted from Day-4 (HANDOFF.md "Day-4 tech-debt punted"):
-collapse 5 module-level dicts to Run class, delete legacy audio
-helpers, tighten _issuer_token_match for 1-3 char tickers, bidi-strip
-uploader/title, methodology drift-check script, nginx SSE limit_conn,
-recency vs report-date.
+Tech-debt punted (Day-6+):
+  - Backend: 5 module-level dicts → Run class; delete legacy audio
+    helpers; tighten _issuer_token_match for 1-3 char tickers; bidi
+    strip uploader/title; methodology drift-check; nginx SSE limit_conn;
+    recency vs report-date; SSE reconnect tail-from-log.
+  - Frontend (carried from Day-5 dossier): live "now-playing claim"
+    highlight while audio plays; methodology pipeline SVG; transcript
+    word keyboard-accessible buttons; touch-target sizing 32px → 44px.
 
 Vultr SSH: ssh root@80.240.26.175.
 Frontend live: http://80.240.26.175
