@@ -108,7 +108,11 @@ NEGATIVE_TITLE_TOKENS: tuple[str, ...] = (
 def _normalize_issuer(name: str | None) -> str:
     if not name:
         return ""
-    cleaned = LEGAL_SUFFIX_RE.sub("", name).strip().strip(",.")
+    # Strip SEC EDGAR state-of-incorporation suffix first: "/DE/", "/CA/", etc.
+    # Comes after the legal token (e.g. "NEWMONT Corp /DE/") so it blocks the
+    # anchored LEGAL_SUFFIX_RE below if not removed first.
+    cleaned = re.sub(r"\s*/[A-Z]{2}/\s*$", "", name)
+    cleaned = LEGAL_SUFFIX_RE.sub("", cleaned).strip().strip(",.")
     return cleaned
 
 
