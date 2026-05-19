@@ -8,6 +8,8 @@ User=diligence
 WorkingDirectory=/srv/diligence
 Environment=PYTHONUNBUFFERED=1
 Environment=DILIGENCE_DATA_DIR=/srv/diligence/data
+EnvironmentFile=/srv/diligence/.env
+Environment=CLOUDSDK_CONFIG=/srv/diligence/.gcloud
 ExecStart=/srv/diligence/.venv/bin/uvicorn backend.api:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=3
